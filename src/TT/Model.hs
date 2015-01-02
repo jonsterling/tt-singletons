@@ -137,9 +137,15 @@ eval tm =
       m' ← eval m
       n' ← eval n
       return $ \ρ →
-        App (m' ρ) (n' ρ)
+        case m' ρ of
+          Lam f → f (n' ρ)
+          _ → App (m' ρ) (n' ρ)
     AX :$ _ → return $ const Ax
-    V v → return . const $ FV v
+    V v → return $ \ρ →
+      case M.lookup v ρ of
+        Just d → d
+        Nothing → FV v
+
     _ → fail "Impossible, but GHC sucks"
 
 -- | Normalize a closed term.
