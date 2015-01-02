@@ -51,7 +51,7 @@ reify ty d =
   case ty of
     Univ → reifyT d
     Pi α β | Lam f ← d → Lam $ \e → reify (β $ reflect α e) (f $ reflect α e)
-    Sing α m →reify α m
+    Sing α m → reify α m
     _ → d
 
 -- | Reification for types.
@@ -207,3 +207,4 @@ nbeOpenTy γ ty = do
   let ρ = envFromCtx γ
   ty' ← eval ty
   quote $ reifyT (ty' ρ)
+

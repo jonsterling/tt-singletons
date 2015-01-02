@@ -23,6 +23,7 @@ newtype Ctx v ty
 
 data CtxError v ty
   = VariableNotFound v
+  deriving (Eq, Show)
 
 class IsCtxError v ty e | e → v ty where
   _CtxError ∷ Prism' e (CtxError v ty)
