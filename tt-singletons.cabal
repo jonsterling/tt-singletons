@@ -14,7 +14,8 @@ cabal-version:       >=1.10
 library
   exposed-modules:     TT.Operator,
                        TT.Context,
-                       TT.Model
+                       TT.Model,
+                       TT.Monad
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.7 && <4.8,
@@ -22,6 +23,7 @@ library
                        vinyl >=0.5,
                        containers,
                        lens,
+                       monad-gen,
                        mtl,
                        transformers
   hs-source-dirs:      src
