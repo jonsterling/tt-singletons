@@ -16,6 +16,7 @@ library
                        TT.Context,
                        TT.Model,
                        TT.Monad,
+                       TT.Judge,
                        TT.Example
   -- other-modules:
   -- other-extensions:
@@ -24,6 +25,7 @@ library
                        vinyl >=0.5,
                        containers,
                        lens,
+                       hoist-error,
                        monad-gen,
                        mtl,
                        transformers

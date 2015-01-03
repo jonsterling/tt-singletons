@@ -9,6 +9,7 @@ module TT.Context
 , IsCtxError(..)
 , contextAsMap
 , containsLocal
+, (>:)
 ) where
 
 import Control.Lens
@@ -26,7 +27,7 @@ data CtxError v ty
   deriving (Eq, Show)
 
 class IsCtxError v ty e | e → v ty where
-  _CtxError ∷ Prism' e (CtxError v ty)
+  _AsCtxError ∷ Prism' e (CtxError v ty)
 
 contextAsMap
   ∷ Ctx v ty
@@ -44,5 +45,11 @@ containsLocal
 containsLocal (Ctx ctx) v =
   case M.lookup v ctx of
     Just ty → return ty
-    Nothing → throwError $ _CtxError # VariableNotFound v
+    Nothing → throwError $ _AsCtxError # VariableNotFound v
 
+(>:)
+  ∷ Ord v
+  ⇒ Ctx v ty
+  → (v, ty)
+  → Ctx v ty
+Ctx γ >: (x,t) = Ctx $ M.insert x t γ
