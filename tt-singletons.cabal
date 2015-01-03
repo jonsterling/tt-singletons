@@ -15,7 +15,8 @@ library
   exposed-modules:     TT.Operator,
                        TT.Context,
                        TT.Model,
-                       TT.Monad
+                       TT.Monad,
+                       TT.Example
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.7 && <4.8,
