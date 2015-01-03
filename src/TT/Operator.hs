@@ -1,15 +1,25 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE UnicodeSyntax #-}
 
 module TT.Operator
 ( Op(..)
+, pi
+, lam
+, (#)
+, sing
+, unit
+, univ
+, ax
 ) where
 
 import Abt.Types.Nat
-import Abt.Class.HEq1
-import Abt.Class.Show1
+import Abt.Class
+
+import Data.Vinyl
+import Prelude hiding (pi)
 
 data Op arity where
   PI ∷ Op '[Z, S Z]
@@ -42,3 +52,24 @@ instance Show1 Op where
     AX → "<>"
     UNIV → "univ"
 
+pi ∷ Abt v Op t ⇒ t Z → t (S Z) → t Z
+pi α xβ = PI $$ α :& xβ :& RNil
+
+lam ∷ Abt v Op t ⇒ t (S Z) → t Z
+lam xe = LAM $$ xe :& RNil
+
+(#) ∷ Abt v Op t ⇒ t Z → t Z → t Z
+m # n = APP $$ m :& n :& RNil
+infixl 3 #
+
+sing ∷ Abt v Op t ⇒ t Z → t Z → t Z
+sing α m = SING $$ α :& m :& RNil
+
+unit ∷ Abt v Op t ⇒ t Z
+unit = UNIT $$ RNil
+
+univ ∷ Abt v Op t ⇒ t Z
+univ = UNIV $$ RNil
+
+ax ∷ Abt v Op t ⇒ t Z
+ax = AX $$ RNil
