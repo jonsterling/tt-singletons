@@ -178,7 +178,7 @@ nbeT ty = do
 -- semantic variable.
 --
 envFromCtx
-  ∷ Ctx v (D v)
+  ∷ Ctx v (t Z)
   → Env v
 envFromCtx =
   M.mapWithKey (\k _ → FV k) .
@@ -190,7 +190,7 @@ nbeOpen
   ∷ ( MonadVar v m
     , Abt v Op t
     )
-  ⇒ Ctx v (D v) -- ^ a context
+  ⇒ Ctx v (t Z) -- ^ a context
   → t Z -- ^ a syntactic type
   → t Z -- ^ a syntactic term
   → m (t Z) -- ^ a normalized syntactic term
@@ -202,14 +202,14 @@ nbeOpen γ ty t = do
 
 -- | Normalize an open type.
 --
-nbeOpenTy
+nbeOpenT
   ∷  ( MonadVar v m
      , Abt v Op t
      )
-  ⇒ Ctx v (D v) -- ^ a context
+  ⇒ Ctx v (t Z) -- ^ a context
   → t Z -- ^ a syntactic type
   → m (t Z) -- ^ a normalized syntactic type
-nbeOpenTy γ ty = do
+nbeOpenT γ ty = do
   let ρ = envFromCtx γ
   ty' ← eval ty
   quote $ reifyT (ty' ρ)
