@@ -9,12 +9,13 @@ import TT.Monad
 import Abt.Concrete.LocallyNameless
 import Abt.Class
 import Control.Monad.Gen
+import Prelude hiding (pi)
 
 test ∷ M e (Tm0 Op)
-test = nbe unit =<< do
+test = do
   x ← fresh
-  return $
-    lam (x \\ var x) # ax
+  nbe (pi void (x \\ void)) $ 
+    lam (x \\ var x)
 
 
 main ∷ IO ()

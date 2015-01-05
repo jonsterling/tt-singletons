@@ -57,7 +57,6 @@ reflect ty k =
       in
        Pair l r
     Unit → Ax
-    Void → Ax
     Sing _ m → m
     _ → k
 
@@ -76,7 +75,6 @@ reify ty d =
        Pair l r
     Sing α m → reify α m
     Unit → Ax
-    Void → Ax
     _ → d
 
 -- | Reification for types.
