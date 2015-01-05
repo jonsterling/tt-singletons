@@ -15,13 +15,14 @@ module TT.Operator
 , ax
 , void
 , abort
+, eq
 ) where
 
 import Abt.Types.Nat
 import Abt.Class
 
 import Data.Vinyl
-import Prelude hiding (pi)
+import Prelude hiding (pi, EQ)
 
 data Op arity where
   PI ∷ Op '[Z, S Z]
@@ -38,6 +39,8 @@ data Op arity where
 
   UNIV ∷ Op '[]
 
+  EQ ∷ Op '[Z, Z, Z, Z]
+
 instance HEq1 Op where
   heq1 PI PI = Just Refl
   heq1 APP APP = Just Refl
@@ -47,6 +50,7 @@ instance HEq1 Op where
   heq1 ABORT ABORT = Just Refl
   heq1 AX AX = Just Refl
   heq1 UNIV UNIV = Just Refl
+  heq1 EQ EQ = Just Refl
   heq1 _ _ = Nothing
 
 instance Show1 Op where
@@ -59,6 +63,7 @@ instance Show1 Op where
     ABORT → "abort"
     UNIT → "unit"
     AX → "<>"
+    EQ → "eq"
     UNIV → "univ"
 
 pi ∷ Abt v Op t ⇒ t Z → t (S Z) → t Z
@@ -88,3 +93,7 @@ univ = UNIV $$ RNil
 
 ax ∷ Abt v Op t ⇒ t Z
 ax = AX $$ RNil
+
+eq ∷ Abt v Op t ⇒ t Z → t Z → t Z → t Z → t Z
+eq α β m n = EQ $$ α :& β :& m :& n :& RNil
+

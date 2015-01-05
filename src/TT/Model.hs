@@ -19,7 +19,7 @@ import Abt.Types
 import Control.Applicative
 import Data.Vinyl
 import qualified Data.Map as M
-import Prelude hiding (pi)
+import Prelude hiding (pi, EQ)
 
 -- | A semantic model with neutral terms
 --
@@ -33,6 +33,7 @@ data D v
   | Abort (DT v) (D v)
   | Ax
   | Univ
+  | Equal (DT v) (DT v) (D v) (D v)
   | FV v
 
 -- | Semantic types
@@ -64,6 +65,7 @@ reifyT ∷ DT v → DT v
 reifyT = \case
   Pi α β → Pi (reifyT α) $ \d → reifyT . β $ reflect α d
   Sing α m → Sing (reifyT α) $ reify α m
+  Equal α β m n → Equal (reifyT α) (reifyT β) (reify α m) (reify β n)
   d → d
 
 -- | Quote a semantic value as a syntactic term.
@@ -89,6 +91,7 @@ quote = \case
     (x \\) <$> quote (f (FV x))
   App m n → (#) <$> quote m <*> quote n
   Ax → pure ax
+  Equal α β m n → eq <$> quote α <*> quote β <*> quote m <*> quote n
   FV v → pure $ var v
 
 -- | Semantic environments map variables to values.
@@ -127,6 +130,13 @@ eval tm =
         Sing (α' ρ) (m' ρ)
     UNIT :$ _ → return $ const Unit
     VOID :$ _ → return $ const Void
+    EQ :$ α :& β :& m :& n :& _→ do
+      α' ← eval α
+      β' ← eval β
+      m' ← eval m
+      n' ← eval n
+      return $ \ρ →
+        Equal (α' ρ) (β' ρ) (m' ρ) (n' ρ)
     ABORT :$ α :& m :& _→ do
       α' ← eval α
       m' ← eval m
