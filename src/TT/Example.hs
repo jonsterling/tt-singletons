@@ -16,8 +16,8 @@ test = nbe unit =<< do
   return $
     lam (x \\ var x) # ax
 
+
 main ∷ IO ()
 main = do
   str ← either fail return . runGenT . _M $ test >>= toString
   print str
-

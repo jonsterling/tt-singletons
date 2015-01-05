@@ -13,15 +13,13 @@ module TT.Judge where
 import TT.Context
 import TT.Operator
 import TT.Model
-import TT.Monad
 
 import Abt.Class
 import Abt.Types
-import Abt.Concrete.LocallyNameless
 
 import Control.Applicative
 import Control.Lens
-import Control.Monad
+import Control.Monad hiding (void)
 import Control.Monad.Error.Class
 import Control.Monad.Error.Hoist
 import Data.Vinyl
@@ -59,6 +57,7 @@ isType γ ty =
       x :\ β ← out xβ
       isType (γ >: (x,α)) β
     UNIT :$ _ → return ()
+    VOID :$ _ → return ()
     SING :$ α :& m :& _ → do
       isType γ α
       checkType γ α m
@@ -83,6 +82,7 @@ checkType γ ty tm =
       checkType γ ty α
       checkType γ α m
     (UNIV :$ _, UNIT :$ _) → return ()
+    (UNIV :$ _, VOID :$ _) → return ()
     (PI :$ α :& xβ :& _, LAM :$ ye :& _) → do
       z ← fresh
       βz ← xβ // var z
@@ -152,4 +152,7 @@ infType γ tm =
       α :& xβ :& RNil ← (out mty <&> preview (_ViewOp PI)) <!?> ExpectedPiType mty
       checkType γ α n
       nbeOpenT γ =<< xβ // n
+    ABORT :$ α :& m :& _ → do
+      checkType γ void m
+      nbeOpenT γ α
     _ → throwError $ NotInferrable tm

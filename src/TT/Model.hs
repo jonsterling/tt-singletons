@@ -16,8 +16,10 @@ import TT.Operator
 
 import Abt.Class
 import Abt.Types
+import Control.Applicative
 import Data.Vinyl
 import qualified Data.Map as M
+import Prelude hiding (pi)
 
 -- | A semantic model with neutral terms
 --
@@ -27,6 +29,8 @@ data D v
   | App (D v) (D v)
   | Sing (DT v) (D v)
   | Unit
+  | Void
+  | Abort (DT v) (D v)
   | Ax
   | Univ
   | FV v
@@ -71,27 +75,21 @@ quote
   ⇒ D v -- ^ semantic value
   → m (t Z) -- ^ a syntactic term
 quote = \case
-  Univ → return $ UNIV $$ RNil
-  Pi α β → do
-    α' ← quote α
+  Univ → pure univ
+  Pi α β →
+    pi <$> quote α <*> do
+      x ← fresh
+      (x \\) <$> quote (β (FV x))
+  Sing α m → sing <$> quote α <*> quote m
+  Unit → pure unit
+  Void → pure void
+  Abort α m → abort <$> quote α <*> quote m
+  Lam f → lam <$> do
     x ← fresh
-    β' ← quote $ β (FV x)
-    return $ PI $$ α' :& (x \\ β') :& RNil
-  Sing α m → do
-    α' ← quote α
-    m' ← quote m
-    return $ SING $$ α' :& m' :& RNil
-  Unit → return $ UNIT $$ RNil
-  Lam f → do
-    x ← fresh
-    f' ← quote $ f (FV x)
-    return $ LAM $$ (x \\ f') :& RNil
-  App m n → do
-    m' ← quote m
-    n' ← quote n
-    return $ APP $$ m' :& n' :& RNil
-  Ax → return $ AX $$ RNil
-  FV v → return $ var v
+    (x \\) <$> quote (f (FV x))
+  App m n → (#) <$> quote m <*> quote n
+  Ax → pure ax
+  FV v → pure $ var v
 
 -- | Semantic environments map variables to values.
 --
@@ -128,6 +126,12 @@ eval tm =
       return $ \ρ →
         Sing (α' ρ) (m' ρ)
     UNIT :$ _ → return $ const Unit
+    VOID :$ _ → return $ const Void
+    ABORT :$ α :& m :& _→ do
+      α' ← eval α
+      m' ← eval m
+      return $ \ρ →
+        Abort (α' ρ) (m' ρ)
     LAM :$ xe :& _ → do
       x :\ e ← out xe
       e' ← eval e

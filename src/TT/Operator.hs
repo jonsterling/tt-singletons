@@ -13,6 +13,8 @@ module TT.Operator
 , unit
 , univ
 , ax
+, void
+, abort
 ) where
 
 import Abt.Types.Nat
@@ -31,6 +33,9 @@ data Op arity where
   UNIT ∷ Op '[]
   AX ∷ Op '[]
 
+  VOID ∷ Op '[]
+  ABORT ∷ Op '[Z, Z]
+
   UNIV ∷ Op '[]
 
 instance HEq1 Op where
@@ -38,6 +43,8 @@ instance HEq1 Op where
   heq1 APP APP = Just Refl
   heq1 SING SING = Just Refl
   heq1 UNIT UNIT = Just Refl
+  heq1 VOID VOID = Just Refl
+  heq1 ABORT ABORT = Just Refl
   heq1 AX AX = Just Refl
   heq1 UNIV UNIV = Just Refl
   heq1 _ _ = Nothing
@@ -48,6 +55,8 @@ instance Show1 Op where
     LAM → "lam"
     APP → "ap"
     SING → "sing"
+    VOID → "void"
+    ABORT → "abort"
     UNIT → "unit"
     AX → "<>"
     UNIV → "univ"
@@ -67,6 +76,12 @@ sing α m = SING $$ α :& m :& RNil
 
 unit ∷ Abt v Op t ⇒ t Z
 unit = UNIT $$ RNil
+
+void ∷ Abt v Op t ⇒ t Z
+void = VOID $$ RNil
+
+abort ∷ Abt v Op t ⇒ t Z → t Z → t Z
+abort α m = ABORT $$ α :& m :& RNil
 
 univ ∷ Abt v Op t ⇒ t Z
 univ = UNIV $$ RNil
