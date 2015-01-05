@@ -33,6 +33,7 @@ data JudgeError v t
   | NotEqual t t
   | ExpectedPiType t
   | ExpectedSgType t
+  deriving Show
 
 makePrisms ''JudgeError
 
