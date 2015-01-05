@@ -27,6 +27,10 @@ data D v
   = Pi (DT v) (D v → D v)
   | Lam (D v → D v)
   | App (D v) (D v)
+  | Sg (DT v) (D v → D v)
+  | Pair (D v) (D v)
+  | Fst (D v)
+  | Snd (D v)
   | Sing (DT v) (D v)
   | Unit
   | Void
@@ -46,6 +50,14 @@ reflect ∷ DT v → D v → D v
 reflect ty k =
   case ty of
     Pi α β → Lam $ \d → reflect (β d) (App k (reify α d))
+    Sg α β →
+      let
+        l = reflect α (Fst k)
+        r = reflect (β l) (Snd k)
+      in
+       Pair l r
+    Unit → Ax
+    Void → Ax
     Sing _ m → m
     _ → k
 
@@ -56,7 +68,15 @@ reify ty d =
   case ty of
     Univ → reifyT d
     Pi α β | Lam f ← d → Lam $ \e → reify (β $ reflect α e) (f $ reflect α e)
+    Sg α β | Pair m n ← d →
+      let
+        l = reify α m
+        r = reify (β l) n
+      in
+       Pair l r
     Sing α m → reify α m
+    Unit → Ax
+    Void → Ax
     _ → d
 
 -- | Reification for types.
@@ -64,6 +84,7 @@ reify ty d =
 reifyT ∷ DT v → DT v
 reifyT = \case
   Pi α β → Pi (reifyT α) $ \d → reifyT . β $ reflect α d
+  Sg α β → Sg (reifyT α) $ \d → reifyT . β $ reflect α d
   Sing α m → Sing (reifyT α) $ reify α m
   Equal α β m n → Equal (reifyT α) (reifyT β) (reify α m) (reify β n)
   d → d
@@ -82,6 +103,10 @@ quote = \case
     pi <$> quote α <*> do
       x ← fresh
       (x \\) <$> quote (β (FV x))
+  Sg α β →
+    sg <$> quote α <*> do
+      x ← fresh
+      (x \\) <$> quote (β (FV x))
   Sing α m → sing <$> quote α <*> quote m
   Unit → pure unit
   Void → pure void
@@ -90,6 +115,9 @@ quote = \case
     x ← fresh
     (x \\) <$> quote (f (FV x))
   App m n → (#) <$> quote m <*> quote n
+  Pair m n → pair <$> quote m <*> quote n
+  Fst m → pi1 <$> quote m
+  Snd m → pi2 <$> quote m
   Ax → pure ax
   Equal α β m n → eq <$> quote α <*> quote β <*> quote m <*> quote n
   FV v → pure $ var v
@@ -123,6 +151,12 @@ eval tm =
       β' ← eval β
       return $ \ρ →
         Pi (α' ρ) (β' . extendEnv ρ x)
+    SG :$ α :& xβ :& _ → do
+      α' ← eval α
+      x :\ β ← out xβ
+      β' ← eval β
+      return $ \ρ →
+        Sg (α' ρ) (β' . extendEnv ρ x)
     SING :$ α :& m :& _ → do
       α' ← eval α
       m' ← eval m
