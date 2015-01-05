@@ -249,9 +249,9 @@ nbeOpen γ ty t = do
 -- | Normalize an open type.
 --
 nbeOpenT
-  ∷  ( MonadVar v m
-     , Abt v Op t
-     )
+  ∷ ( MonadVar v m
+    , Abt v Op t
+    )
   ⇒ Ctx v (t Z) -- ^ a context
   → t Z -- ^ a syntactic type
   → m (t Z) -- ^ a normalized syntactic type
