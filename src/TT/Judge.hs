@@ -106,6 +106,9 @@ checkType γ ty tm =
       unless (m' === n') $
         throwError $ NotEqual m' n'
     (UNIT :$ _, AX :$ _) → return ()
+    (EQ :$ α :& β :& m :& n :& _, _) → do
+      prfTy ← computeEq γ (α, β, m, n)
+      checkType γ prfTy tm
     _ → do
       ne ← neutral tm
       if ne then checkTypeNe γ ty tm else
