@@ -185,4 +185,12 @@ infType γ tm =
     ABORT :$ α :& m :& _ → do
       _ ← checkType γ void m
       nbeOpenT γ α
+    COE :$ α :& β :& q :& m :& _ → do
+      _ ← checkType γ (eq univ univ α β) q
+      _ ← checkType γ α m
+      nbeOpenT γ β
+    COH :$ α :& β :& q :& m :& _ → do
+      q' ← checkType γ (eq univ univ α β) q
+      m' ← checkType γ α m
+      nbeOpenT γ $ eq α β m' (coe α β q' m)
     _ → throwError $ NotInferrable tm
