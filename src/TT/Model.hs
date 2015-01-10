@@ -39,7 +39,26 @@ data D v
   | Univ
   | Equal (DT v) (DT v) (D v) (D v)
   | FV v
+  | Coe (DT v) (DT v) (D v) (D v)
+  | Coh (DT v) (DT v) (D v) (D v)
 
+-- | Whether a semantic term is canonical
+--
+canon
+  ∷ D v
+  → Bool
+canon = \case
+  Pi _ _ → True
+  Lam _ → True
+  Sg _ _ → True
+  Pair _ _ → True
+  Sing _ _ → True
+  Unit  → True
+  Void  → True
+  Ax → True
+  Univ → True
+  _ → False
+  
 -- | Semantic types
 --
 type DT v = D v
@@ -118,6 +137,8 @@ quote = \case
   Snd m → pi2 <$> quote m
   Ax → pure ax
   Equal α β m n → eq <$> quote α <*> quote β <*> quote m <*> quote n
+  Coe α β p m → coe <$> quote α <*> quote β <*> quote p <*> quote m
+  Coh α β p m → coh <$> quote α <*> quote β <*> quote p <*> quote m
   FV v → pure $ var v
 
 -- | Semantic environments map variables to values.
@@ -173,7 +194,7 @@ eval tm =
           (Univ, Univ, Void, Void) → Unit
           (Univ, Univ, Unit, Unit) → Unit
           (Univ, Univ, Pi σ τ, Pi σ' τ') →
-            Sg (Equal Univ Univ σ σ') $ \_ →
+            Sg (Equal Univ Univ σ' σ) $ \_ →
               Pi σ $ \s → Pi σ' $ \s' →
                 Pi (Equal σ σ' s s') $ \_ →
                   Equal Univ Univ (τ s) (τ' s')
@@ -182,6 +203,9 @@ eval tm =
               Pi σ $ \s → Pi σ' $ \s' →
                 Pi (Equal σ σ' s s') $ \_ →
                   Equal Univ Univ (τ s) (τ' s')
+          (Univ, Univ, Sing σ s, Sing σ' s') →
+            Equal σ σ' s s'
+          (Univ, Univ, m'', n'') | canon m'' && canon n'' → Void
           (Void, Void, _, _) → Unit
           (Unit, Unit, _, _) → Unit
           (Pi σ τ, Pi σ' τ', f, g) →
@@ -192,7 +216,49 @@ eval tm =
             Sg (Equal σ σ' (Fst p) (Fst q)) $ \_ →
               Equal (τ (Fst p)) (τ' (Fst q)) (Snd p) (Snd q)
           (Sing σ s, Sing σ' s', _, _) → Equal σ σ' s s'
-          _ → Equal (α' ρ) (β' ρ) (m' ρ) (n' ρ)
+          (α'', β'', m'', n'')
+            | canon α'' && canon β'' → Void
+            | otherwise → Equal α'' β'' m'' n''
+    COE :$ α :& β :& q :& m :& _ → do
+      α' ← eval α
+      β' ← eval β
+      q' ← eval q
+      m' ← eval m
+      return $ \ρ → 
+        case (α' ρ, β' ρ, q' ρ, m' ρ) of
+          (Univ, Univ, _, m'') → m''
+          (Void, Void, _, m'') → m''
+          (Unit, Unit, _, m'') → m''
+          (Sg σ τ, Sg σ' τ', q'', m'') →
+            let
+              s0 = Fst m''
+              t0 = Snd m''
+              qσ = Fst q''
+              qτ = App (App (App (Snd q'') s0) s1) (Coh σ σ' qσ s0)
+              s1 = Coe σ σ' qσ s0
+              t1 = Coe (τ s0) (τ' s1) qτ t0
+            in
+             Pair s1 t1
+          (Pi σ τ, Pi σ' τ', q'', m'') →
+            Lam $ \s1 →
+              let
+                qσ = Fst q''
+                qτ = App (App (App (Snd q'') s1) s0) (Coh σ' σ qσ s1)
+                s0 = Coe σ σ' qσ s1
+                t0 = App m'' s0
+              in
+                Coe (τ s0) (τ' s1) qτ t0
+          (Sing σ s, Sing σ' s', _, _) → s'
+          (α'', β'', q'', m'')
+            | canon α'' && canon β'' → Abort β'' q''
+            | otherwise → Coe α'' β'' q'' m''
+    COH :$ α :& β :& q :& m :& _ → do
+      α' ← eval α
+      β' ← eval β
+      q' ← eval q
+      m' ← eval m
+      return $ \ρ →
+        Coh (α' ρ) (β' ρ) (q' ρ) (m' ρ)
     ABORT :$ α :& m :& _→ do
       α' ← eval α
       m' ← eval m
@@ -215,7 +281,6 @@ eval tm =
       case M.lookup v ρ of
         Just d → d
         Nothing → FV v
-
     _ → fail "Impossible, but GHC sucks"
 
 -- | Normalize a closed term.
