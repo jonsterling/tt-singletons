@@ -298,6 +298,12 @@ eval tm =
       m' ← eval m
       n' ← eval n
       return $ \ρ → doApp (m' ρ) (n' ρ)
+    FST :$ m :& _ → do
+      m' ← eval m
+      return $ \ρ → doFst (m' ρ)
+    SND :$ m :& _ → do
+      m' ← eval m
+      return $ \ρ → doSnd (m' ρ)
     AX :$ _ → return $ const Ax
     V v → return $ \ρ →
       case M.lookup v ρ of
