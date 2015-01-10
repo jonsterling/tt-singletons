@@ -110,11 +110,11 @@ reify ∷ DT v → D v → D v
 reify ty d =
   case ty of
     Univ → reifyT d
-    Pi α β | Lam f ← d → Lam $ \e → reify (β $ reflect α e) (f $ reflect α e)
-    Sg α β | Pair m n ← d →
+    Pi α β → Lam $ \e → reify (β $ reflect α e) (doApp d $ reflect α e)
+    Sg α β →
       let
-        l = reify α m
-        r = reify (β l) n
+        l = reify α (doFst d)
+        r = reify (β l) (doSnd d)
       in
        Pair l r
     Sing α m → reify α m
