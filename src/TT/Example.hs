@@ -27,7 +27,7 @@ main = do
   print str
 
   res ← either (const $ fail "error") return . runGenT . _M $ do
-    checkType mempty unit (ax ∷ Tm0 Op)
+    _ ← checkType mempty unit (ax ∷ Tm0 Op)
 
     x ← fresh
     let
@@ -38,7 +38,8 @@ main = do
     y ← fresh
     p ← fresh
 
-    checkType mempty (eq ty ty f g) $ lam (x \\ lam (y \\ (lam (p \\ ax))))
+    _ ← checkType mempty (eq ty ty f g) $ lam (x \\ lam (y \\ (lam (p \\ ax))))
+    return ()
 
         
   print res

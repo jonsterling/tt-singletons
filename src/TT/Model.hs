@@ -168,7 +168,31 @@ eval tm =
       m' ← eval m
       n' ← eval n
       return $ \ρ →
-        Equal (α' ρ) (β' ρ) (m' ρ) (n' ρ)
+        case (α' ρ, β' ρ, m' ρ, n' ρ) of
+          (Univ, Univ, Univ, Univ) → Unit
+          (Univ, Univ, Void, Void) → Unit
+          (Univ, Univ, Unit, Unit) → Unit
+          (Univ, Univ, Pi σ τ, Pi σ' τ') →
+            Sg (Equal Univ Univ σ σ') $ \_ →
+              Pi σ $ \s → Pi σ' $ \s' →
+                Pi (Equal σ σ' s s') $ \_ →
+                  Equal Univ Univ (τ s) (τ' s')
+          (Univ, Univ, Sg σ τ, Sg σ' τ') →
+            Sg (Equal Univ Univ σ σ') $ \_ →
+              Pi σ $ \s → Pi σ' $ \s' →
+                Pi (Equal σ σ' s s') $ \_ →
+                  Equal Univ Univ (τ s) (τ' s')
+          (Void, Void, _, _) → Unit
+          (Unit, Unit, _, _) → Unit
+          (Pi σ τ, Pi σ' τ', f, g) →
+            Pi σ $ \s → Pi σ' $ \s' →
+              Pi (Equal σ σ' s s') $ \_ →
+                Equal (τ s) (τ' s') (App f s) (App g s')
+          (Sg σ τ, Sg σ' τ', p, q) →
+            Sg (Equal σ σ' (Fst p) (Fst q)) $ \_ →
+              Equal (τ (Fst p)) (τ' (Fst q)) (Snd p) (Snd q)
+          (Sing σ s, Sing σ' s', _, _) → Equal σ σ' s s'
+          _ → Equal (α' ρ) (β' ρ) (m' ρ) (n' ρ)
     ABORT :$ α :& m :& _→ do
       α' ← eval α
       m' ← eval m

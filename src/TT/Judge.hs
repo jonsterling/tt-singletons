@@ -49,25 +49,32 @@ type JUDGE v t m =
 
 isType
   ∷ JUDGE v t m
-  ⇒ Ctx v (t Z)
-  → t Z
-  → m ()
+  ⇒ Ctx v (t Z) -- ^ the context
+  → t Z -- ^ the term
+  → m (t Z) -- ^ the term turned into a type if possible
 isType γ ty =
   out ty >>= \case
-    UNIV :$ _ → return ()
+    UNIV :$ _ → return univ
     PI :$ α :& xβ :& _ → do
-      isType γ α
+      α' ← isType γ α
       x :\ β ← out xβ
-      isType (γ >: (x,α)) β
+      pi α' . (x \\) <$> isType (γ >: (x, α')) β
     SG :$ α :& xβ :& _ → do
-      isType γ α
+      α' ← isType γ α
       x :\ β ← out xβ
-      isType (γ >: (x,α)) β
-    UNIT :$ _ → return ()
-    VOID :$ _ → return ()
+      sg α' . (x \\) <$> isType (γ >: (x, α')) β
+    UNIT :$ _ → return unit
+    VOID :$ _ → return void
     SING :$ α :& m :& _ → do
-      isType γ α
-      checkType γ α m
+      α' ← isType γ α
+      m' ← checkType γ α' m
+      return $ sing α' m'
+    EQ :$ α :& β :& m :& n :& _ → do
+      α' ← isType γ α
+      β' ← isType γ β
+      m' ← checkType γ α' m
+      n' ← checkType γ β' n
+      nbeOpenT γ $ eq α' β' m' n'
     APP :$ _ → checkTypeNe γ univ ty
     _ → throwError $ NotType ty
 
@@ -78,44 +85,37 @@ checkType
   ⇒ Ctx v (t Z) -- ^ the context
   → t Z -- ^ the type
   → t Z -- ^ the term
-  → m ()
-checkType γ ty tm =
-  (,) <$> out ty <*> out tm >>= \case
+  → m (t Z) -- ^ the elaborated term
+checkType γ ty tm = do
+  ty' ← isType γ ty
+  (,) <$> out ty' <*> out tm >>= \case
     (UNIV :$ _, PI :$ α :& xβ :& _) → do
-      checkType γ ty α
+      α' ← checkType γ ty α
       x :\ β ← out xβ
-      checkType (γ >: (x, α)) ty β
+      pi α' . (x \\) <$> checkType (γ >: (x, α')) ty β
     (UNIV :$ _, SING :$ α :& m :& _) → do
-      checkType γ ty α
-      checkType γ α m
-    (UNIV :$ _, UNIT :$ _) → return ()
-    (UNIV :$ _, VOID :$ _) → return ()
+      α' ← checkType γ ty α
+      sing α' <$> checkType γ α' m
+    (UNIV :$ _, UNIT :$ _) → return unit
+    (UNIV :$ _, VOID :$ _) → return void
     (PI :$ α :& xβ :& _, LAM :$ ye :& _) → do
       z ← fresh
       βz ← xβ // var z
       ez ← ye // var z
-      checkType (γ >: (z,α)) βz ez
+      lam . (z \\) <$> checkType (γ >: (z, α)) βz ez
     (SG :$ α :& xβ :& _, PAIR :$ m :& n :& _) → do
-      checkType γ α m
-      βm ← nbeOpenT γ =<< xβ // m
-      checkType γ βm n
+      m' ← checkType γ α m
+      βm ← nbeOpenT γ =<< xβ // m'
+      pair m' <$> checkType γ βm n
     (SING :$ α :& m :& _, _) → do
       α' ← nbeOpenT γ α
-      checkType γ α' tm
+      tm' ← checkType γ α' tm
       m' ← nbeOpen γ α m
-      n' ← nbeOpen γ α tm
+      n' ← nbeOpen γ α tm'
       unless (m' === n') $
         throwError $ NotEqual m' n'
-    (UNIT :$ _, AX :$ _) → return ()
-    (EQ :$ α :& β :& m :& n :& _, AX :$ _) → do
-      checkType γ α m
-      checkType γ β n
-      unless (α === β) $
-        unless (m === n) $
-          throwError $ NotEqual m n
-    (EQ :$ α :& β :& m :& n :& _, _) → do
-      prfTy ← computeEq γ (α, β, m, n)
-      checkType γ prfTy tm
+      return m'
+    (UNIT :$ _, AX :$ _) → return ax
     _ → do
       ne ← neutral tm
       if ne then checkTypeNe γ ty tm else
@@ -142,6 +142,7 @@ neutral tm =
   out tm <&> \case
     V _ → True
     APP :$ _ → True
+    EQ :$ _ → True
     _ → False
 
 -- | Check the type of neutral terms.
@@ -151,11 +152,12 @@ checkTypeNe
   ⇒ Ctx v (t Z) -- ^ the context
   → t Z -- ^ the type
   → t Z -- ^ the neutral term
-  → m ()
+  → m (t Z)
 checkTypeNe γ ty tm = do
   ty' ← erase =<< infType γ tm
   unless (ty === ty') $
     throwError $ NotOfType ty tm
+  return ty'
 
 -- | Infer the type of neutral terms.
 --
@@ -170,8 +172,8 @@ infType γ tm =
     APP :$ m :& n :& _ → do
       mty ← erase =<< infType γ m
       α :& xβ :& _ ← (out mty <&> preview (_ViewOp PI)) <!?> ExpectedPiType mty
-      checkType γ α n
-      nbeOpenT γ =<< xβ // n
+      n' ← checkType γ α n
+      nbeOpenT γ =<< xβ // n'
     FST :$ m :& _ → do
       mty ← erase =<< infType γ m
       α :& _ ← (out mty <&> preview (_ViewOp SG)) <!?> ExpectedSgType mty
@@ -181,85 +183,6 @@ infType γ tm =
       _ :& xβ :& _ ← (out mty <&> preview (_ViewOp SG)) <!?> ExpectedSgType mty
       nbeOpenT γ =<< xβ // pi1 m
     ABORT :$ α :& m :& _ → do
-      checkType γ void m
+      _ ← checkType γ void m
       nbeOpenT γ α
     _ → throwError $ NotInferrable tm
-
-
--- | Given a tuple (α,β,m,n) compute the type of proofs of m:α=n:β.
---
-computeEq
-  ∷ JUDGE v t m
-  ⇒ Ctx v (t Z)
-  → (t Z, t Z, t Z, t Z)
-  → m (t Z)
-computeEq γ (α, β, m, n) = do
-  (,,,)
-    <$> (out =<< nbeOpenT γ α)
-    <*> (out =<< nbeOpenT γ β)
-    <*> (out =<< nbeOpen γ α m)
-    <*> (out =<< nbeOpen γ β n)
-  >>= \case
-    (UNIV :$ _, UNIV :$ _, UNIV :$ _, UNIV :$ _) → pure unit
-    (UNIV :$ _, UNIV :$ _, UNIT :$ _, UNIT :$ _) → pure unit
-    (UNIV :$ _, UNIV :$ _, VOID :$ _, VOID :$ _) → pure unit
-    (UNIV :$ _, UNIV :$ _, PI :$ φ :& xψ :& _, PI :$ φ' :& yψ' :& _) → do
-      v ← fresh
-      x ← fresh
-      y ← fresh
-      p ← fresh
-      ψx ← xψ // var x
-      ψ'y ← yψ' // var y
-      let
-        φφ' = eq univ univ φ φ'
-        xy = eq φ φ' (var x) (var y)
-        ψψ' = eq univ univ ψx ψ'y
-
-      pure $ sg φφ' (v \\ pi φ (x \\ pi φ' (y \\ pi xy (p \\ ψψ'))))
-
-    (UNIV :$ _, UNIV :$ _, SG :$ φ :& xψ :& _, SG :$ φ' :& yψ' :& _) → do
-      v ← fresh
-      x ← fresh
-      y ← fresh
-      p ← fresh
-
-      ψx ← nbeOpenT γ =<< xψ // var x
-      ψ'y ← nbeOpenT γ =<< yψ' // var y
-
-      let
-        φφ' = eq univ univ φ φ'
-        xy = eq φ φ' (var x) (var y)
-        ψxψ'y = eq univ univ ψx ψ'y
-
-      pure $ sg φφ' (v \\ pi φ (x \\ pi φ' (y \\ pi xy (p \\ ψxψ'y))))
-
-    (VOID :$ _, VOID :$ _, _, _) → pure unit
-    (UNIT :$ _, UNIT :$ _, _, _) → pure unit
-    (EQ :$ _, EQ :$ _, _, _) → pure unit
-
-    (PI :$ φ :& xψ :& _, PI :$ φ' :& yψ' :& _, LAM :$ xf :& _, LAM :$ yg :& _) → do
-      x ← fresh
-      y ← fresh
-      p ← fresh
-
-      ψx ← nbeOpenT γ =<< xψ // var x
-      ψ'y ← nbeOpenT γ =<< yψ' // var y
-
-      fx ← nbeOpen γ ψx =<< xf // var x
-      fy ← nbeOpen γ ψ'y =<< yg // var y
-
-      let
-        xy = eq φ φ' (var x) (var y)
-        fxgy = eq ψx ψ'y fx fy
-
-      pure $ pi φ (x \\ pi φ' (y \\ pi xy (p \\ fxgy)))
-
-    (SG :$ φ :& xψ :& _, SG :$ φ' :& yψ' :& _, PAIR :$ l :& r :& _, PAIR :$ l' :& r' :& _) → do
-      p ← fresh
-      ψl ← nbeOpenT γ =<< xψ // l
-      ψ'l' ← nbeOpenT γ =<< yψ' // l'
-      pure $ sg (eq φ φ' l l') $ p \\ eq ψl ψ'l' r r'
-
-    (α', β', m', n') →
-      pure $ eq (into α') (into β') (into m') (into n')
-
