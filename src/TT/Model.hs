@@ -42,6 +42,31 @@ data D v
   | Coe (DT v) (DT v) (D v) (D v)
   | Coh (DT v) (DT v) (D v) (D v)
 
+-- | Perform application if possible
+--
+doApp
+  ∷ D v
+  → D v
+  → D v
+doApp (Lam f) m = f m
+doApp m n = App m n
+
+-- | Project the first component of a pair if possible
+--
+doFst
+  ∷ D v
+  → D v
+doFst (Pair m _) = m
+doFst m = Fst m
+
+-- | Project the second component of a pair if possible
+--
+doSnd
+  ∷ D v
+  → D v
+doSnd (Pair _ m) = m
+doSnd m = Snd m
+
 -- | Whether a semantic term is canonical
 --
 canon
@@ -211,10 +236,10 @@ eval tm =
           (Pi σ τ, Pi σ' τ', f, g) →
             Pi σ $ \s → Pi σ' $ \s' →
               Pi (Equal σ σ' s s') $ \_ →
-                Equal (τ s) (τ' s') (App f s) (App g s')
+                Equal (τ s) (τ' s') (doApp f s) (doApp g s')
           (Sg σ τ, Sg σ' τ', p, q) →
-            Sg (Equal σ σ' (Fst p) (Fst q)) $ \_ →
-              Equal (τ (Fst p)) (τ' (Fst q)) (Snd p) (Snd q)
+            Sg (Equal σ σ' (doFst p) (doFst q)) $ \_ →
+              Equal (τ (doFst p)) (τ' (doFst q)) (doSnd p) (doSnd q)
           (Sing σ s, Sing σ' s', _, _) → Equal σ σ' s s'
           (α'', β'', m'', n'')
             | canon α'' && canon β'' → Void
@@ -231,10 +256,10 @@ eval tm =
           (Unit, Unit, _, m'') → m''
           (Sg σ τ, Sg σ' τ', q'', m'') →
             let
-              s0 = Fst m''
-              t0 = Snd m''
-              qσ = Fst q''
-              qτ = App (App (App (Snd q'') s0) s1) (Coh σ σ' qσ s0)
+              s0 = doFst m''
+              t0 = doSnd m''
+              qσ = doFst q''
+              qτ = doApp (doApp (doApp (doSnd q'') s0) s1) (Coh σ σ' qσ s0)
               s1 = Coe σ σ' qσ s0
               t1 = Coe (τ s0) (τ' s1) qτ t0
             in
@@ -242,13 +267,13 @@ eval tm =
           (Pi σ τ, Pi σ' τ', q'', m'') →
             Lam $ \s1 →
               let
-                qσ = Fst q''
-                qτ = App (App (App (Snd q'') s1) s0) (Coh σ' σ qσ s1)
+                qσ = doFst q''
+                qτ = doApp (doApp (doApp (doSnd q'') s1) s0) (Coh σ' σ qσ s1)
                 s0 = Coe σ σ' qσ s1
                 t0 = App m'' s0
               in
                 Coe (τ s0) (τ' s1) qτ t0
-          (Sing σ s, Sing σ' s', _, _) → s'
+          (Sing _ _, Sing _ s', _, _) → s'
           (α'', β'', q'', m'')
             | canon α'' && canon β'' → Abort β'' q''
             | otherwise → Coe α'' β'' q'' m''
@@ -272,10 +297,7 @@ eval tm =
     APP :$ m :& n :& _ → do
       m' ← eval m
       n' ← eval n
-      return $ \ρ →
-        case m' ρ of
-          Lam f → f (n' ρ)
-          _ → App (m' ρ) (n' ρ)
+      return $ \ρ → doApp (m' ρ) (n' ρ)
     AX :$ _ → return $ const Ax
     V v → return $ \ρ →
       case M.lookup v ρ of
