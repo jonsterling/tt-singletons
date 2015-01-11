@@ -13,8 +13,6 @@ module TT.Context
 ) where
 
 import Control.Monad.Catch
-import Control.Lens
-import Control.Monad.Error.Class
 import qualified Data.Map as M
 import Data.Monoid
 import Data.Typeable
