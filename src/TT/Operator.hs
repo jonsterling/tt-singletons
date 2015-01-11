@@ -11,8 +11,10 @@ module TT.Operator
 , lam
 , (#)
 , sing
+, squash
 , unit
 , univ
+, box
 , ax
 , void
 , abort
@@ -41,6 +43,8 @@ data Op arity where
   SND ∷ Op '[Z]
 
   SING ∷ Op '[Z, Z]
+  SQUASH ∷ Op '[Z]
+  BOX ∷ Op '[Z]
 
   UNIT ∷ Op '[]
   AX ∷ Op '[]
@@ -62,6 +66,8 @@ instance HEq1 Op where
   heq1 FST FST = Just Refl
   heq1 SND SND = Just Refl
   heq1 SING SING = Just Refl
+  heq1 SQUASH SQUASH = Just Refl
+  heq1 BOX BOX = Just Refl
   heq1 UNIT UNIT = Just Refl
   heq1 VOID VOID = Just Refl
   heq1 ABORT ABORT = Just Refl
@@ -82,6 +88,8 @@ instance Show1 Op where
     FST → "fst"
     SND → "snd"
     SING → "sing"
+    SQUASH → "squash"
+    BOX → "box"
     VOID → "void"
     ABORT → "abort"
     UNIT → "unit"
@@ -106,6 +114,12 @@ infixl 3 #
 
 sing ∷ Abt v Op t ⇒ t Z → t Z → t Z
 sing α m = SING $$ α :& m :& RNil
+
+squash ∷ Abt v Op t ⇒ t Z → t Z
+squash α = SQUASH $$ α :& RNil
+
+box ∷ Abt v Op t ⇒ t Z → t Z
+box m = BOX $$ m :& RNil
 
 unit ∷ Abt v Op t ⇒ t Z
 unit = UNIT $$ RNil

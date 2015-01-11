@@ -38,8 +38,8 @@ main = do
     y ← fresh
     p ← fresh
 
-    _ ← checkType mempty (eq ty ty f g) $ lam (x \\ lam (y \\ (lam (p \\ ax))))
-    return ()
+    res ← checkType mempty (eq ty ty f g) $ lam (x \\ lam (y \\ (lam (p \\ ax))))
+    toString res
 
         
   print res

@@ -69,14 +69,18 @@ isType γ ty =
       α' ← isType γ α
       m' ← checkType γ α' m
       return $ sing α' m'
+    SQUASH :$ α :& _ → 
+      squash <$> isType γ α
     EQ :$ α :& β :& m :& n :& _ → do
       α' ← isType γ α
       β' ← isType γ β
       m' ← checkType γ α' m
       n' ← checkType γ β' n
       nbeOpenT γ $ eq α' β' m' n'
-    APP :$ _ → checkTypeNe γ univ ty
-    _ → throwError $ NotType ty
+    _ → do
+      ne ← neutral ty
+      if ne then checkTypeNe γ univ ty else
+        throwError $ NotType ty
 
 -- | Check the type of normal terms.
 --
@@ -112,9 +116,13 @@ checkType γ ty tm = do
       tm' ← checkType γ α' tm
       m' ← nbeOpen γ α m
       n' ← nbeOpen γ α tm'
-      unless (m' === n') $
-        throwError $ NotEqual m' n'
-      return m'
+      unify γ α m' n'
+    (SQUASH :$ α :& _, BOX :$ m :& _) → do
+      m' ← checkType γ α m
+      return $ box m'
+    (SQUASH :$ α :& _, _) → do
+      m' ← checkType γ α tm
+      return $ box m'
     (UNIT :$ _, AX :$ _) → return ax
     _ → do
       ne ← neutral tm
@@ -143,6 +151,11 @@ neutral tm =
     V _ → True
     APP :$ _ → True
     EQ :$ _ → True
+    FST :$ _ → True
+    SND :$ _ → True
+    COE :$ _ → True
+    COH :$ _ → True
+    ABORT :$ _ → True
     _ → False
 
 -- | Check the type of neutral terms.
@@ -155,9 +168,56 @@ checkTypeNe
   → m (t Z)
 checkTypeNe γ ty tm = do
   ty' ← erase =<< infType γ tm
-  unless (ty === ty') $
-    throwError $ NotOfType ty tm
-  return ty'
+  unify γ univ ty ty'
+
+-- | Decide definitional equality
+--
+unify
+  ∷ JUDGE v t m
+  ⇒ Ctx v (t Z)
+  → t Z
+  → t Z
+  → t Z
+  → m (t Z)
+unify γ α m n = do
+  α' ← nbeOpenT γ α
+  m' ← nbeOpen γ α' m
+  n' ← nbeOpen γ α' n
+  (,,) <$> out α' <*> out m' <*> out n' >>= \case
+    _ | m' === n' → return m'
+    (_, BOX :$ p :& _, BOX :$ _ :& _) → return $ box p
+    (SQUASH :$ _, _, _) → return m'
+    (UNIV :$ _, SQUASH :$ σ :& _, SQUASH :$ τ :& _) →
+      squash <$> unify γ univ σ τ
+    (UNIV :$ _, PI :$ σ :& xτ :& _, PI :$ σ' :& yτ' :& _) → do
+      σ'' ← unify γ univ σ σ'
+      pi σ'' <$> do
+        z ← fresh
+        τz ← xτ // var z
+        τ'z ← yτ' // var z
+        (z \\) <$> unify (γ >: (z, σ'')) univ τz τ'z
+    (UNIV :$ _, SG :$ σ :& xτ :& _, SG :$ σ' :& yτ' :& _) → do
+      σ'' ← unify γ univ σ σ'
+      sg σ'' <$> do
+        z ← fresh
+        τz ← xτ // var z
+        τ'z ← yτ' // var z
+        (z \\) <$> unify (γ >: (z, σ'')) univ τz τ'z
+    (UNIV :$ _, SING :$ σ :& s :& _, SING :$ σ' :& s' :& _) → do
+      σ'' ← unify γ univ σ σ'
+      sing σ'' <$> unify γ σ'' s s'
+    (PI :$ σ :& uτ :& _, LAM :$ xe :& _, LAM :$ ye' :& _) → do
+      z ← fresh
+      ez ← xe // var z
+      e'z ← ye' // var z
+      τz ← uτ // var z
+      lam . (z \\) <$> unify (γ >: (z, σ)) τz ez e'z
+    (SG :$ σ :& uτ :& _, PAIR :$ p :& q :& _, PAIR :$ p' :& q' :& _) → do
+      p'' ← unify γ σ p p'
+      τp ← uτ // p''
+      pair p'' <$> unify γ τp q q'
+    _ → throwError $ NotEqual m' n'
+   
 
 -- | Infer the type of neutral terms.
 --
