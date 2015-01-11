@@ -120,9 +120,6 @@ checkType γ ty tm = do
     (SQUASH :$ α :& _, BOX :$ m :& _) → do
       m' ← checkType γ α m
       return $ box m'
-    (SQUASH :$ α :& _, _) → do
-      m' ← checkType γ α tm
-      return $ box m'
     (UNIT :$ _, AX :$ _) → return ax
     _ → do
       ne ← neutral tm
