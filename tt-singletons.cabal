@@ -22,7 +22,7 @@ library
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.7 && <4.8,
-                       abt >=0.1.0.2.1,
+                       abt >=0.1.1.0,
                        vinyl >=0.5,
                        containers,
                        exceptions,

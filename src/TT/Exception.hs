@@ -7,7 +7,6 @@ module TT.Exception where
 
 import Abt.Class
 import Abt.Types
-import Abt.Concrete.LocallyNameless
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Catch
@@ -52,7 +51,3 @@ throwTT
   → m α
 throwTT = 
   renderError >=> throwM
-
-deriving instance Typeable Var
-deriving instance Typeable Z
-deriving instance Typeable Tm
