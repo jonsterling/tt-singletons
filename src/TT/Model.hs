@@ -253,6 +253,9 @@ eval tm =
                   Equal Univ Univ (τ s) (τ' s')
           (Univ, Univ, Sing σ s, Sing σ' s') →
             Equal σ σ' s s'
+          (Univ, Univ, Squash σ, Squash τ) →
+            Squash $ Sg (Pi σ $ \_ → τ) $ \_ →
+              Pi τ $ \_ → σ
           (Univ, Univ, m'', n'') | canon m'' && canon n'' → Void
           (Void, Void, _, _) → Unit
           (Unit, Unit, _, _) → Unit
@@ -264,6 +267,7 @@ eval tm =
             Squash $ Sg (Equal σ σ' (doFst p) (doFst q)) $ \_ →
               Equal (τ (doFst p)) (τ' (doFst q)) (doSnd p) (doSnd q)
           (Sing σ s, Sing σ' s', _, _) → Equal σ σ' s s'
+          (Squash _, Squash _, _, _) → Unit
           (α'', β'', m'', n'')
             | canon α'' && canon β'' → Void
             | otherwise → Equal α'' β'' m'' n''
