@@ -27,10 +27,10 @@ import Prelude hiding (pi, EQ)
 
 data JudgeError v t
   = CtxError (CtxError v t)
+  | UnifError (UnifError v t)
   | NotType t
   | NotOfType t t
   | NotInferrable t
-  | NotEqual t t
   | ExpectedPiType t
   | ExpectedSgType t
   deriving Show
@@ -39,6 +39,9 @@ makePrisms ''JudgeError
 
 instance IsCtxError v t (JudgeError v t) where
   _AsCtxError = _CtxError
+
+instance IsUnifError v t (JudgeError v t) where
+  _AsUnifError = _UnifError 
 
 type JUDGE v t m =
   ( MonadVar v m
@@ -169,58 +172,6 @@ checkTypeNe γ ty tm = do
   ty'' ← unify γ univ ty ty'
   nbeOpen γ ty'' tm
 
--- | Decide definitional equality
---
-unify
-  ∷ JUDGE v t m
-  ⇒ Ctx v (t Z)
-  → t Z
-  → t Z
-  → t Z
-  → m (t Z)
-unify γ α m n = do
-  α' ← nbeOpenT γ α
-  m' ← nbeOpen γ α' m
-  n' ← nbeOpen γ α' n
-  (,,) <$> out α' <*> out m' <*> out n' >>= \case
-    _ | m' === n' → return m'
-    (_, BOX :$ p :& _, BOX :$ _ :& _) → return $ box p
-    (SQUASH :$ _, _, _) → return m'
-    (UNIV :$ _, SQUASH :$ σ :& _, SQUASH :$ τ :& _) →
-      squash <$> unify γ univ σ τ
-    (UNIV :$ _, PI :$ σ :& xτ :& _, PI :$ σ' :& yτ' :& _) → do
-      σ'' ← unify γ univ σ σ'
-      pi σ'' <$> do
-        z ← fresh
-        τz ← xτ // var z
-        τ'z ← yτ' // var z
-        (z \\) <$> unify (γ >: (z, σ'')) univ τz τ'z
-    (UNIV :$ _, SG :$ σ :& xτ :& _, SG :$ σ' :& yτ' :& _) → do
-      σ'' ← unify γ univ σ σ'
-      sg σ'' <$> do
-        z ← fresh
-        τz ← xτ // var z
-        τ'z ← yτ' // var z
-        (z \\) <$> unify (γ >: (z, σ'')) univ τz τ'z
-    (UNIV :$ _, SING :$ σ :& s :& _, SING :$ σ' :& s' :& _) → do
-      σ'' ← unify γ univ σ σ'
-      sing σ'' <$> unify γ σ'' s s'
-    (PI :$ σ :& uτ :& _, LAM :$ xe :& _, LAM :$ ye' :& _) → do
-      z ← fresh
-      ez ← xe // var z
-      e'z ← ye' // var z
-      τz ← uτ // var z
-      lam . (z \\) <$> unify (γ >: (z, σ)) τz ez e'z
-    (SG :$ σ :& uτ :& _, PAIR :$ p :& q :& _, PAIR :$ p' :& q' :& _) → do
-      p'' ← unify γ σ p p'
-      τp ← uτ // p''
-      pair p'' <$> unify γ τp q q'
-    _ → do
-      m'' ← toString m
-      n'' ← toString n
-      error $ show (m'', n'')
-      --errthrowError $ NotEqual m' n'
-   
 
 -- | Infer the type of neutral terms.
 --

@@ -1,7 +1,10 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UnicodeSyntax #-}
 
 -- | We'll do normalization by evaluation in the manner of "A modular
@@ -16,10 +19,28 @@ import TT.Operator
 
 import Abt.Class hiding (Refl)
 import Abt.Types
+import Control.Lens hiding ((#))
 import Control.Applicative
+import Control.Monad.Error.Class
+import Data.Monoid
 import Data.Vinyl
 import qualified Data.Map as M
 import Prelude hiding (pi, EQ)
+
+data UnifError v t
+  = NotEqual t t t
+  deriving (Eq, Show)
+
+class IsUnifError v t e | e → v t where
+  _AsUnifError ∷ Prism' e (UnifError v t)
+
+type EVAL v t e m =
+  ( MonadVar v m
+  , MonadError e m
+  , IsUnifError v (t Z) e
+  , Abt v Op t
+  , HEq1 t
+  )
 
 -- | A semantic model with neutral terms
 --
@@ -158,7 +179,10 @@ type DT v = D v
 
 -- | Reflection expands variables to enable new reductions
 --
-reflect ∷ DT v → D v → D v
+reflect
+  ∷ DT v
+  → D v
+  → D v
 reflect ty k =
   case ty of
     Pi α β → Lam $ \d → reflect (β d) (App k (reify α d))
@@ -193,7 +217,9 @@ reify ty d =
 
 -- | Reification for types.
 --
-reifyT ∷ DT v → DT v
+reifyT
+  ∷ DT v
+  → DT v
 reifyT = \case
   Pi α β → Pi (reifyT α) $ \d → reifyT . β $ reflect α d
   Sg α β → Sg (reifyT α) $ \d → reifyT . β $ reflect α d
@@ -205,9 +231,7 @@ reifyT = \case
 -- | Quote a semantic value as a syntactic term.
 --
 quote
-  ∷ ( MonadVar v m
-    , Abt v Op t
-    )
+  ∷ EVAL v t e m
   ⇒ D v -- ^ semantic value
   → m (t Z) -- ^ a syntactic term
 quote = \case
@@ -255,9 +279,7 @@ extendEnv
 extendEnv ρ x d = M.insert x d ρ
 
 eval
-  ∷ ( MonadVar v m
-    , Abt v Op t
-    )
+  ∷ EVAL v t e m
   ⇒ t Z -- ^ a syntactic term
   → m (Env v → D v)
 eval tm =
@@ -297,34 +319,35 @@ eval tm =
       β' ← eval β
       q' ← eval q
       m' ← eval m
-      return $ \ρ → 
-        case (α' ρ, β' ρ, q' ρ, m' ρ) of
-          (Univ, Univ, _, m'') → m''
-          (Void, Void, _, m'') → m''
-          (Unit, Unit, _, m'') → m''
-          (Sg σ τ, Sg σ' τ', q'', m'') →
-            let
-              s0 = doFst m''
-              t0 = doSnd m''
-              qσ = doFst q''
-              qτ = doApp (doApp (doApp (doSnd q'') s0) s1) (Coh σ σ' qσ s0)
-              s1 = Coe σ σ' qσ s0
-              t1 = Coe (τ s0) (τ' s1) qτ t0
-            in
-             Pair s1 t1
-          (Pi σ τ, Pi σ' τ', q'', m'') →
-            Lam $ \s1 →
+      catchError (m' <$ unify mempty univ α β) $ \_ →
+        return $ \ρ → 
+          case (α' ρ, β' ρ, q' ρ, m' ρ) of
+            (Univ, Univ, _, m'') → m''
+            (Void, Void, _, m'') → m''
+            (Unit, Unit, _, m'') → m''
+            (Sg σ τ, Sg σ' τ', q'', m'') →
               let
+                s0 = doFst m''
+                t0 = doSnd m''
                 qσ = doFst q''
-                qτ = doApp (doApp (doApp (doSnd q'') s1) s0) (Coh σ' σ qσ s1)
-                s0 = Coe σ σ' qσ s1
-                t0 = doApp m'' s0
+                qτ = doApp (doApp (doApp (doSnd q'') s0) s1) (Coh σ σ' qσ s0)
+                s1 = Coe σ σ' qσ s0
+                t1 = Coe (τ s0) (τ' s1) qτ t0
               in
-                Coe (τ s0) (τ' s1) qτ t0
-          (Sing _ _, Sing _ s', _, _) → s'
-          (α'', β'', q'', m'')
-            | canon α'' && canon β'' → Abort β'' q''
-            | otherwise → Coe α'' β'' q'' m''
+               Pair s1 t1
+            (Pi σ τ, Pi σ' τ', q'', m'') →
+              Lam $ \s1 →
+                let
+                  qσ = doFst q''
+                  qτ = doApp (doApp (doApp (doSnd q'') s1) s0) (Coh σ' σ qσ s1)
+                  s0 = Coe σ σ' qσ s1
+                  t0 = doApp m'' s0
+                in
+                  Coe (τ s0) (τ' s1) qτ t0
+            (Sing _ _, Sing _ s', _, _) → s'
+            (α'', β'', q'', m'')
+              | canon α'' && canon β'' → Abort β'' q''
+              | otherwise → Coe α'' β'' q'' m''
     COH :$ α :& β :& q :& m :& _ → do
       α' ← eval α
       β' ← eval β
@@ -370,9 +393,7 @@ eval tm =
 -- | Normalize a closed term.
 --
 nbe
-  ∷ ( MonadVar v m
-    , Abt v Op t
-    )
+  ∷ EVAL v t e m
   ⇒ t Z -- ^ a syntactic type
   → t Z -- ^ a synctactic term
   → m (t Z) -- ^ a normalized syntactic term
@@ -384,9 +405,7 @@ nbe ty t = do
 -- | Normalize a closed type.
 --
 nbeT
-  ∷ ( MonadVar v m
-    , Abt v Op t
-    )
+  ∷ EVAL v t e m
   ⇒ t Z -- ^ a syntactic type
   → m (t Z) -- ^ a normalized syntactic type
 nbeT ty = do
@@ -406,9 +425,7 @@ envFromCtx =
 -- | Normalize an open term.
 --
 nbeOpen
-  ∷ ( MonadVar v m
-    , Abt v Op t
-    )
+  ∷ EVAL v t e m
   ⇒ Ctx v (t Z) -- ^ a context
   → t Z -- ^ a syntactic type
   → t Z -- ^ a syntactic term
@@ -422,9 +439,7 @@ nbeOpen γ ty t = do
 -- | Normalize an open type.
 --
 nbeOpenT
-  ∷ ( MonadVar v m
-    , Abt v Op t
-    )
+  ∷ EVAL v t e m
   ⇒ Ctx v (t Z) -- ^ a context
   → t Z -- ^ a syntactic type
   → m (t Z) -- ^ a normalized syntactic type
@@ -433,3 +448,58 @@ nbeOpenT γ ty = do
   ty' ← eval ty
   quote $ reifyT (ty' ρ)
 
+
+-- | Decide definitional equality
+--
+unify
+  ∷ ( MonadVar v m
+    , Abt v Op t
+    , MonadError e m
+    , IsUnifError v (t Z) e
+    , HEq1 t
+    )
+  ⇒ Ctx v (t Z)
+  → t Z
+  → t Z
+  → t Z
+  → m (t Z)
+unify γ α m n = do
+  α' ← nbeOpenT γ α
+  m' ← nbeOpen γ α' m
+  n' ← nbeOpen γ α' n
+  (,,) <$> out α' <*> out m' <*> out n' >>= \case
+    _ | m' === n' → return m'
+    (_, BOX :$ p :& _, BOX :$ _ :& _) → return $ box p
+    (SQUASH :$ _, _, _) → return m'
+    (UNIV :$ _, SQUASH :$ σ :& _, SQUASH :$ τ :& _) →
+      squash <$> unify γ univ σ τ
+    (UNIV :$ _, PI :$ σ :& xτ :& _, PI :$ σ' :& yτ' :& _) → do
+      σ'' ← unify γ univ σ σ'
+      pi σ'' <$> do
+        z ← fresh
+        τz ← xτ // var z
+        τ'z ← yτ' // var z
+        (z \\) <$> unify (γ >: (z, σ'')) univ τz τ'z
+    (UNIV :$ _, SG :$ σ :& xτ :& _, SG :$ σ' :& yτ' :& _) → do
+      σ'' ← unify γ univ σ σ'
+      sg σ'' <$> do
+        z ← fresh
+        τz ← xτ // var z
+        τ'z ← yτ' // var z
+        (z \\) <$> unify (γ >: (z, σ'')) univ τz τ'z
+    (UNIV :$ _, SING :$ σ :& s :& _, SING :$ σ' :& s' :& _) → do
+      σ'' ← unify γ univ σ σ'
+      sing σ'' <$> unify γ σ'' s s'
+    (PI :$ σ :& uτ :& _, LAM :$ xe :& _, LAM :$ ye' :& _) → do
+      z ← fresh
+      ez ← xe // var z
+      e'z ← ye' // var z
+      τz ← uτ // var z
+      lam . (z \\) <$> unify (γ >: (z, σ)) τz ez e'z
+    (SG :$ σ :& uτ :& _, PAIR :$ p :& q :& _, PAIR :$ p' :& q' :& _) → do
+      p'' ← unify γ σ p p'
+      τp ← uτ // p''
+      pair p'' <$> unify γ τp q q'
+    _ → do
+      throwError . review _AsUnifError $ NotEqual α' m' n'
+   

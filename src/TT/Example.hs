@@ -1,10 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UnicodeSyntax #-}
 
 module TT.Example where
 
 import TT.Operator
-import TT.Model
 import TT.Judge
 import TT.Monad
 
@@ -15,17 +15,8 @@ import Control.Monad.Gen
 import Data.Monoid
 import Prelude hiding (pi)
 
-test ∷ M e (Tm0 Op)
-test = do
-  x ← fresh
-  nbe (pi void (x \\ void)) $ 
-    lam (x \\ var x)
-
 main ∷ IO ()
 main = do
-  str ← either fail return . runGenT . _M $ test >>= toString
-  print str
-
   res ← either (const $ fail "error") return . runGenT . _M $ do
     _ ← checkType mempty unit (ax ∷ Tm0 Op)
 
