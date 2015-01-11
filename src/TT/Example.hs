@@ -35,11 +35,7 @@ main = do
       g = lam (x \\ ax)
       ty = pi unit (x \\ unit)
 
-    y ← fresh
-    p ← fresh
-
-    res ← checkType mempty (eq ty ty f g) $ lam (x \\ lam (y \\ (lam (p \\ ax))))
-    toString res
+    toString =<< checkType mempty (eq ty ty f g) (refl ty f)
 
         
   print res
