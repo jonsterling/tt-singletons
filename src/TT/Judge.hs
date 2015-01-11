@@ -126,7 +126,7 @@ checkType γ ty tm = do
       if ne then checkTypeNe γ ty tm else
         throwError $ NotOfType ty tm
 
--- | Unwrap singleton types.
+-- | Unwrap singleton types
 --
 erase
   ∷ JUDGE v t m
@@ -153,6 +153,7 @@ neutral tm =
     COE :$ _ → True
     COH :$ _ → True
     ABORT :$ _ → True
+    REFL :$ _ → True
     _ → False
 
 -- | Check the type of neutral terms.
@@ -213,7 +214,11 @@ unify γ α m n = do
       p'' ← unify γ σ p p'
       τp ← uτ // p''
       pair p'' <$> unify γ τp q q'
-    _ → throwError $ NotEqual m' n'
+    _ → do
+      m'' ← toString m
+      n'' ← toString n
+      error $ show (m'', n'')
+      --errthrowError $ NotEqual m' n'
    
 
 -- | Infer the type of neutral terms.
@@ -250,4 +255,8 @@ infType γ tm =
       q' ← checkType γ (eq univ univ α β) q
       m' ← checkType γ α m
       nbeOpenT γ $ eq α β m' (coe α β q' m)
+    REFL :$ α :& m :& _ → do
+      α' ← isType γ α 
+      m' ← checkType γ α' m
+      nbeOpenT γ $ eq α' α' m' m'
     _ → throwError $ NotInferrable tm

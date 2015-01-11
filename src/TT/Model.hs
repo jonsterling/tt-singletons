@@ -14,7 +14,7 @@ module TT.Model where
 import TT.Context
 import TT.Operator
 
-import Abt.Class
+import Abt.Class hiding (Refl)
 import Abt.Types
 import Control.Applicative
 import Data.Vinyl
@@ -43,6 +43,7 @@ data D v
   | FV v
   | Coe (DT v) (DT v) (D v) (D v)
   | Coh (DT v) (DT v) (D v) (D v)
+  | Refl (DT v) (D v)
 
 -- | Perform application if possible
 --
@@ -235,6 +236,7 @@ quote = \case
   Equal α β m n → eq <$> quote α <*> quote β <*> quote m <*> quote n
   Coe α β q m → coe <$> quote α <*> quote β <*> quote q <*> quote m
   Coh α β q m → coh <$> quote α <*> quote β <*> quote q <*> quote m
+  Refl α m → refl <$> quote α <*> quote m
   FV v → pure $ var v
   Box q → box <$> quote q
 
@@ -330,6 +332,11 @@ eval tm =
       m' ← eval m
       return $ \ρ →
         Coh (α' ρ) (β' ρ) (q' ρ) (m' ρ)
+    REFL :$ α :& m :& _ → do
+      α' ← eval α
+      m' ← eval m
+      return $ \ρ →
+        Refl (α' ρ) (m' ρ)
     ABORT :$ α :& m :& _→ do
       α' ← eval α
       m' ← eval m

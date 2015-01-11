@@ -24,6 +24,7 @@ module TT.Operator
 , pi2
 , coe
 , coh
+, refl
 ) where
 
 import Abt.Types.Nat
@@ -57,6 +58,7 @@ data Op arity where
   EQ ∷ Op '[Z, Z, Z, Z]
   COE ∷ Op '[Z, Z, Z, Z]
   COH ∷ Op '[Z, Z, Z, Z]
+  REFL ∷ Op '[Z, Z]
 
 instance HEq1 Op where
   heq1 PI PI = Just Refl
@@ -76,6 +78,7 @@ instance HEq1 Op where
   heq1 EQ EQ = Just Refl
   heq1 COE COE = Just Refl
   heq1 COH COH = Just Refl
+  heq1 REFL REFL = Just Refl
   heq1 _ _ = Nothing
 
 instance Show1 Op where
@@ -98,6 +101,7 @@ instance Show1 Op where
     UNIV → "univ"
     COE → "coe"
     COH → "coh"
+    REFL → "refl"
 
 pi ∷ Abt v Op t ⇒ t Z → t (S Z) → t Z
 pi α xβ = PI $$ α :& xβ :& RNil
@@ -153,3 +157,6 @@ coe α β p m = COE $$ α :& β :& p :& m :& RNil
 
 coh ∷ Abt v Op t ⇒ t Z → t Z → t Z → t Z → t Z
 coh α β p m = COH $$ α :& β :& p :& m :& RNil
+
+refl ∷ Abt v Op t ⇒ t Z → t Z → t Z
+refl α m = REFL $$ α :& m :& RNil
