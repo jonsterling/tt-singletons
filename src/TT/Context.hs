@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -6,28 +7,26 @@
 module TT.Context
 ( Ctx
 , CtxError(..)
-, IsCtxError(..)
 , contextAsMap
 , containsLocal
 , (>:)
 ) where
 
-import Control.Lens
-import Control.Monad.Error.Class
+import Control.Monad.Catch
 import qualified Data.Map as M
 import Data.Monoid
+import Data.Typeable
 
 newtype Ctx v ty
   = Ctx
   { _ctx ∷ M.Map v ty
   } deriving Monoid
 
-data CtxError v ty
+data CtxError v
   = VariableNotFound v
-  deriving (Eq, Show)
+  deriving (Eq, Show, Typeable)
 
-class IsCtxError v ty e | e → v ty where
-  _AsCtxError ∷ Prism' e (CtxError v ty)
+instance (Show v, Typeable v) ⇒ Exception (CtxError v)
 
 contextAsMap
   ∷ Ctx v ty
@@ -35,9 +34,10 @@ contextAsMap
 contextAsMap = _ctx
 
 containsLocal
-  ∷ ( MonadError e m
-    , IsCtxError v ty e
+  ∷ ( MonadThrow m
     , Ord v
+    , Typeable v
+    , Show v
     )
   ⇒ Ctx v ty
   → v
@@ -45,7 +45,7 @@ containsLocal
 containsLocal (Ctx ctx) v =
   case M.lookup v ctx of
     Just ty → return ty
-    Nothing → throwError $ _AsCtxError # VariableNotFound v
+    Nothing → throwM $ VariableNotFound v
 
 (>:)
   ∷ Ord v
