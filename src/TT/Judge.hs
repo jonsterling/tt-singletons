@@ -18,24 +18,30 @@ import Abt.Class
 import Abt.Types
 
 import Control.Applicative
-import Control.Lens
+import Control.Lens hiding ((#))
 import Control.Monad hiding (void)
 import Control.Monad.Error.Class
 import Control.Monad.Error.Hoist
 import Data.Vinyl
+import Prelude hiding (pi, EQ)
 
 data JudgeError v t
   = CtxError (CtxError v t)
+  | UnifError (UnifError v t)
   | NotType t
   | NotOfType t t
   | NotInferrable t
-  | NotEqual t t
   | ExpectedPiType t
+  | ExpectedSgType t
+  deriving Show
 
 makePrisms ''JudgeError
 
 instance IsCtxError v t (JudgeError v t) where
   _AsCtxError = _CtxError
+
+instance IsUnifError v t (JudgeError v t) where
+  _AsUnifError = _UnifError 
 
 type JUDGE v t m =
   ( MonadVar v m
@@ -46,23 +52,38 @@ type JUDGE v t m =
 
 isType
   ∷ JUDGE v t m
-  ⇒ Ctx v (t Z)
-  → t Z
-  → m ()
+  ⇒ Ctx v (t Z) -- ^ the context
+  → t Z -- ^ the term
+  → m (t Z) -- ^ the term turned into a type if possible
 isType γ ty =
   out ty >>= \case
-    UNIV :$ _ → return ()
+    UNIV :$ _ → return univ
     PI :$ α :& xβ :& _ → do
-      isType γ α
+      α' ← isType γ α
       x :\ β ← out xβ
-      isType (γ >: (x,α)) β
-    UNIT :$ _ → return ()
-    VOID :$ _ → return ()
+      pi α' . (x \\) <$> isType (γ >: (x, α')) β
+    SG :$ α :& xβ :& _ → do
+      α' ← isType γ α
+      x :\ β ← out xβ
+      sg α' . (x \\) <$> isType (γ >: (x, α')) β
+    UNIT :$ _ → return unit
+    VOID :$ _ → return void
     SING :$ α :& m :& _ → do
-      isType γ α
-      checkType γ α m
-    APP :$ _ → checkTypeNe γ univ ty
-    _ → throwError $ NotType ty
+      α' ← isType γ α
+      m' ← checkType γ α' m
+      return $ sing α' m'
+    SQUASH :$ α :& _ → 
+      squash <$> isType γ α
+    EQ :$ α :& β :& m :& n :& _ → do
+      α' ← isType γ α
+      β' ← isType γ β
+      m' ← checkType γ α' m
+      n' ← checkType γ β' n
+      nbeOpenT γ $ eq α' β' m' n'
+    _ → do
+      ne ← neutral ty
+      if ne then checkTypeNe γ univ ty else
+        throwError $ NotType ty
 
 -- | Check the type of normal terms.
 --
@@ -71,37 +92,44 @@ checkType
   ⇒ Ctx v (t Z) -- ^ the context
   → t Z -- ^ the type
   → t Z -- ^ the term
-  → m ()
-checkType γ ty tm =
-  (,) <$> out ty <*> out tm >>= \case
+  → m (t Z) -- ^ the elaborated term
+checkType γ ty tm = do
+  ty' ← isType γ ty
+  (,) <$> out ty' <*> out tm >>= \case
     (UNIV :$ _, PI :$ α :& xβ :& _) → do
-      checkType γ ty α
+      α' ← checkType γ ty α
       x :\ β ← out xβ
-      checkType (γ >: (x, α)) ty β
+      pi α' . (x \\) <$> checkType (γ >: (x, α')) ty β
     (UNIV :$ _, SING :$ α :& m :& _) → do
-      checkType γ ty α
-      checkType γ α m
-    (UNIV :$ _, UNIT :$ _) → return ()
-    (UNIV :$ _, VOID :$ _) → return ()
+      α' ← checkType γ ty α
+      sing α' <$> checkType γ α' m
+    (UNIV :$ _, UNIT :$ _) → return unit
+    (UNIV :$ _, VOID :$ _) → return void
     (PI :$ α :& xβ :& _, LAM :$ ye :& _) → do
       z ← fresh
       βz ← xβ // var z
       ez ← ye // var z
-      checkType (γ >: (z,α)) βz ez
+      lam . (z \\) <$> checkType (γ >: (z, α)) βz ez
+    (SG :$ α :& xβ :& _, PAIR :$ m :& n :& _) → do
+      m' ← checkType γ α m
+      βm ← nbeOpenT γ =<< xβ // m'
+      pair m' <$> checkType γ βm n
     (SING :$ α :& m :& _, _) → do
       α' ← nbeOpenT γ α
-      checkType γ α' tm
+      tm' ← checkType γ α' tm
       m' ← nbeOpen γ α m
-      n' ← nbeOpen γ α tm
-      unless (m' === n') $
-        throwError $ NotEqual m' n'
-    (UNIT :$ _, AX :$ _) → return ()
+      n' ← nbeOpen γ α tm'
+      unify γ α m' n'
+    (SQUASH :$ α :& _, BOX :$ m :& _) → do
+      m' ← checkType γ α m
+      return $ box m'
+    (UNIT :$ _, AX :$ _) → return ax
     _ → do
       ne ← neutral tm
       if ne then checkTypeNe γ ty tm else
         throwError $ NotOfType ty tm
 
--- | Unwrap singleton types.
+-- | Unwrap singleton types
 --
 erase
   ∷ JUDGE v t m
@@ -122,6 +150,13 @@ neutral tm =
   out tm <&> \case
     V _ → True
     APP :$ _ → True
+    EQ :$ _ → True
+    FST :$ _ → True
+    SND :$ _ → True
+    COE :$ _ → True
+    COH :$ _ → True
+    ABORT :$ _ → True
+    REFL :$ _ → True
     _ → False
 
 -- | Check the type of neutral terms.
@@ -131,11 +166,12 @@ checkTypeNe
   ⇒ Ctx v (t Z) -- ^ the context
   → t Z -- ^ the type
   → t Z -- ^ the neutral term
-  → m ()
+  → m (t Z)
 checkTypeNe γ ty tm = do
   ty' ← erase =<< infType γ tm
-  unless (ty === ty') $
-    throwError $ NotOfType ty tm
+  ty'' ← unify γ univ ty ty'
+  nbeOpen γ ty'' tm
+
 
 -- | Infer the type of neutral terms.
 --
@@ -149,10 +185,30 @@ infType γ tm =
     V v → containsLocal γ v
     APP :$ m :& n :& _ → do
       mty ← erase =<< infType γ m
-      α :& xβ :& RNil ← (out mty <&> preview (_ViewOp PI)) <!?> ExpectedPiType mty
-      checkType γ α n
-      nbeOpenT γ =<< xβ // n
+      α :& xβ :& _ ← (out mty <&> preview (_ViewOp PI)) <!?> ExpectedPiType mty
+      n' ← checkType γ α n
+      nbeOpenT γ =<< xβ // n'
+    FST :$ m :& _ → do
+      mty ← erase =<< infType γ m
+      α :& _ ← (out mty <&> preview (_ViewOp SG)) <!?> ExpectedSgType mty
+      return α
+    SND :$ m :& _ → do
+      mty ← erase =<< infType γ m
+      _ :& xβ :& _ ← (out mty <&> preview (_ViewOp SG)) <!?> ExpectedSgType mty
+      nbeOpenT γ =<< xβ // pi1 m
     ABORT :$ α :& m :& _ → do
-      checkType γ void m
+      _ ← checkType γ void m
       nbeOpenT γ α
+    COE :$ α :& β :& q :& m :& _ → do
+      _ ← checkType γ (eq univ univ α β) q
+      _ ← checkType γ α m
+      nbeOpenT γ β
+    COH :$ α :& β :& q :& m :& _ → do
+      q' ← checkType γ (eq univ univ α β) q
+      m' ← checkType γ α m
+      nbeOpenT γ $ eq α β m' (coe α β q' m)
+    REFL :$ α :& m :& _ → do
+      α' ← isType γ α 
+      m' ← checkType γ α' m
+      nbeOpenT γ $ eq α' α' m' m'
     _ → throwError $ NotInferrable tm
