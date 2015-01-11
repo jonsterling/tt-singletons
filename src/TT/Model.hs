@@ -1,6 +1,11 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
@@ -16,30 +21,33 @@ module TT.Model where
 
 import TT.Context
 import TT.Operator
+import TT.Exception
 
 import Abt.Class hiding (Refl)
 import Abt.Types
 import Control.Lens hiding ((#))
 import Control.Applicative
-import Control.Monad.Error.Class
+import Control.Monad.Catch
 import Data.Monoid
+import Data.Foldable
+import Data.Typeable hiding (Refl)
 import Data.Vinyl
 import qualified Data.Map as M
 import Prelude hiding (pi, EQ)
 
-data UnifError v t
+data UnifError t
   = NotEqual t t t
-  deriving (Eq, Show)
+  deriving (Eq, Show, Functor, Foldable, Traversable, Typeable)
 
-class IsUnifError v t e | e → v t where
-  _AsUnifError ∷ Prism' e (UnifError v t)
+instance Typeable (DTm t) ⇒ Exception (UnifError (DTm t))
 
-type EVAL v t e m =
+type EVAL v t m =
   ( MonadVar v m
-  , MonadError e m
-  , IsUnifError v (t Z) e
+  , MonadThrow m
+  , MonadCatch m
   , Abt v Op t
   , HEq1 t
+  , Typeable (t Z)
   )
 
 -- | A semantic model with neutral terms
@@ -222,7 +230,7 @@ reifyT = \case
 -- | Quote a semantic value as a syntactic term.
 --
 quote
-  ∷ EVAL v t e m
+  ∷ EVAL v t m
   ⇒ D v -- ^ semantic value
   → m (t Z) -- ^ a syntactic term
 quote = \case
@@ -270,7 +278,7 @@ extendEnv
 extendEnv ρ x d = M.insert x d ρ
 
 eval
-  ∷ EVAL v t e m
+  ∷ EVAL v t m
   ⇒ t Z -- ^ a syntactic term
   → m (Env v → D v)
 eval tm =
@@ -310,7 +318,7 @@ eval tm =
       β' ← eval β
       q' ← eval q
       m' ← eval m
-      catchError (m' <$ unify mempty univ α β) $ \_ →
+      catch (m' <$ unify mempty univ α β) $ \(SomeException _) →
         return $ \ρ → 
           case (α' ρ, β' ρ, q' ρ, m' ρ) of
             (Univ, Univ, _, m'') → m''
@@ -384,7 +392,7 @@ eval tm =
 -- | Normalize a closed term.
 --
 nbe
-  ∷ EVAL v t e m
+  ∷ EVAL v t m
   ⇒ t Z -- ^ a syntactic type
   → t Z -- ^ a synctactic term
   → m (t Z) -- ^ a normalized syntactic term
@@ -396,7 +404,7 @@ nbe ty t = do
 -- | Normalize a closed type.
 --
 nbeT
-  ∷ EVAL v t e m
+  ∷ EVAL v t m
   ⇒ t Z -- ^ a syntactic type
   → m (t Z) -- ^ a normalized syntactic type
 nbeT ty = do
@@ -416,7 +424,7 @@ envFromCtx =
 -- | Normalize an open term.
 --
 nbeOpen
-  ∷ EVAL v t e m
+  ∷ EVAL v t m
   ⇒ Ctx v (t Z) -- ^ a context
   → t Z -- ^ a syntactic type
   → t Z -- ^ a syntactic term
@@ -430,7 +438,7 @@ nbeOpen γ ty t = do
 -- | Normalize an open type.
 --
 nbeOpenT
-  ∷ EVAL v t e m
+  ∷ EVAL v t m
   ⇒ Ctx v (t Z) -- ^ a context
   → t Z -- ^ a syntactic type
   → m (t Z) -- ^ a normalized syntactic type
@@ -443,12 +451,7 @@ nbeOpenT γ ty = do
 -- | Decide definitional equality
 --
 unify
-  ∷ ( MonadVar v m
-    , Abt v Op t
-    , MonadError e m
-    , IsUnifError v (t Z) e
-    , HEq1 t
-    )
+  ∷ EVAL v t m
   ⇒ Ctx v (t Z)
   → t Z
   → t Z
@@ -491,5 +494,5 @@ unify γ α m n = do
       τp ← uτ // p''
       pair p'' <$> unify γ τp q q'
     _ → do
-      throwError . review _AsUnifError $ NotEqual α' m' n'
+      throwTT $ NotEqual α' m' n'
    

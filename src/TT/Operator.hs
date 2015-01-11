@@ -1,7 +1,9 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UnicodeSyntax #-}
 
 module TT.Operator
@@ -30,6 +32,7 @@ module TT.Operator
 import Abt.Types.Nat
 import Abt.Class
 
+import Data.Typeable hiding (Refl)
 import Data.Vinyl
 import Prelude hiding (pi, EQ)
 
@@ -59,6 +62,8 @@ data Op arity where
   COE ∷ Op '[Z, Z, Z, Z]
   COH ∷ Op '[Z, Z, Z, Z]
   REFL ∷ Op '[Z, Z]
+
+deriving instance Typeable Op
 
 instance HEq1 Op where
   heq1 PI PI = Just Refl

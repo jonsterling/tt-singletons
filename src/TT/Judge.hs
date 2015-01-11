@@ -1,5 +1,9 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -13,41 +17,42 @@ module TT.Judge where
 import TT.Context
 import TT.Operator
 import TT.Model
+import TT.Exception
 
 import Abt.Class
 import Abt.Types
 
 import Control.Applicative
 import Control.Lens hiding ((#))
+import Control.Lens.Action
 import Control.Monad hiding (void)
-import Control.Monad.Error.Class
-import Control.Monad.Error.Hoist
+import Control.Monad.Catch
+import Data.Foldable
+import Data.Typeable
 import Data.Vinyl
 import Prelude hiding (pi, EQ)
 
-data JudgeError v t
-  = CtxError (CtxError v t)
-  | UnifError (UnifError v t)
+data JudgeError t
+  = UnifError (UnifError t)
   | NotType t
   | NotOfType t t
   | NotInferrable t
   | ExpectedPiType t
   | ExpectedSgType t
-  deriving Show
+  deriving (Show, Functor, Foldable, Traversable, Typeable)
+
+instance Typeable (DTm t) ⇒ Exception (JudgeError (DTm t))
 
 makePrisms ''JudgeError
 
-instance IsCtxError v t (JudgeError v t) where
-  _AsCtxError = _CtxError
-
-instance IsUnifError v t (JudgeError v t) where
-  _AsUnifError = _UnifError 
-
 type JUDGE v t m =
   ( MonadVar v m
-  , MonadError (JudgeError v (t Z)) m
+  , MonadThrow m
+  , MonadCatch m
   , Abt v Op t
   , HEq1 t
+  , Typeable (t Z)
+  , Typeable v
   )
 
 isType
@@ -83,7 +88,7 @@ isType γ ty =
     _ → do
       ne ← neutral ty
       if ne then checkTypeNe γ univ ty else
-        throwError $ NotType ty
+        throwTT $ NotType ty
 
 -- | Check the type of normal terms.
 --
@@ -127,7 +132,7 @@ checkType γ ty tm = do
     _ → do
       ne ← neutral tm
       if ne then checkTypeNe γ ty tm else
-        throwError $ NotOfType ty tm
+        throwTT $ NotOfType ty tm
 
 -- | Unwrap singleton types
 --
@@ -185,16 +190,19 @@ infType γ tm =
     V v → containsLocal γ v
     APP :$ m :& n :& _ → do
       mty ← erase =<< infType γ m
-      α :& xβ :& _ ← (out mty <&> preview (_ViewOp PI)) <!?> ExpectedPiType mty
+      α :& xβ :& _ ← (out mty ^!? acts . _ViewOp PI)
+        >>= maybe (throwTT $ ExpectedPiType mty) return
       n' ← checkType γ α n
       nbeOpenT γ =<< xβ // n'
     FST :$ m :& _ → do
       mty ← erase =<< infType γ m
-      α :& _ ← (out mty <&> preview (_ViewOp SG)) <!?> ExpectedSgType mty
+      α :& _ ← (out mty ^!? acts . _ViewOp SG)
+        >>= maybe (throwTT $ ExpectedSgType mty) return
       return α
     SND :$ m :& _ → do
       mty ← erase =<< infType γ m
-      _ :& xβ :& _ ← (out mty <&> preview (_ViewOp SG)) <!?> ExpectedSgType mty
+      _ :& xβ :& _ ← (out mty ^!? acts . _ViewOp SG)
+        >>= maybe (throwTT $ ExpectedSgType mty) return
       nbeOpenT γ =<< xβ // pi1 m
     ABORT :$ α :& m :& _ → do
       _ ← checkType γ void m
@@ -211,4 +219,4 @@ infType γ tm =
       α' ← isType γ α 
       m' ← checkType γ α' m
       nbeOpenT γ $ eq α' α' m' m'
-    _ → throwError $ NotInferrable tm
+    _ → throwTT $ NotInferrable tm

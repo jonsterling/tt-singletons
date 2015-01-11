@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UnicodeSyntax #-}
@@ -11,14 +12,25 @@ import TT.Monad
 import Abt.Concrete.LocallyNameless
 import Abt.Class
 import Control.Monad hiding (void)
-import Control.Monad.Gen
+import Control.Monad.Trans
 import Data.Monoid
 import Prelude hiding (pi)
 
+
+printTerm
+  ∷ ( MonadIO m
+    , MonadVar Var m
+    )
+  ⇒ Tm0 Op
+  → m ()
+printTerm =
+  toString >=> liftIO . print
+   
+
 main ∷ IO ()
 main = do
-  res ← either (const $ fail "error") return . runGenT . _M $ do
-    _ ← checkType mempty unit (ax ∷ Tm0 Op)
+  runMT $ do
+    printTerm =<< checkType mempty unit ax
 
     x ← fresh
     let
@@ -26,7 +38,5 @@ main = do
       g = lam (x \\ ax)
       ty = pi unit (x \\ unit)
 
-    toString =<< checkType mempty (eq ty ty f g) (refl ty f)
-
-        
-  print res
+    printTerm =<< 
+      checkType mempty (eq ty ty f g) (refl ty f)

@@ -17,6 +17,7 @@ library
                        TT.Model,
                        TT.Monad,
                        TT.Judge,
+                       TT.Exception,
                        TT.Example
   -- other-modules:
   -- other-extensions:
@@ -24,9 +25,9 @@ library
                        abt >=0.1.0.2.1,
                        vinyl >=0.5,
                        containers,
+                       exceptions,
                        lens,
-                       hoist-error,
-                       monad-gen,
+                       lens-action >=0.1.0.1,
                        mtl,
                        transformers
   hs-source-dirs:      src
