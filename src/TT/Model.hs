@@ -98,15 +98,6 @@ doSnd = \case
   Box m → Box $ doSnd m
   m → Snd m
 
--- | Wrap a value in a box
---
-doBox
-  ∷ D v
-  → D v
-doBox = \case
-  Box m → Box m
-  m → Box m
-
 -- | Compute the truth of an identification
 --
 doEqual
@@ -194,7 +185,7 @@ reflect ty k =
        Pair l r
     Unit → Ax
     Sing _ m → m
-    Squash α → doBox (reflect α k)
+    Squash α | Box m ← k → Box $ reflect α m
     _ → k
 
 -- | Reification expands the result of β-normalization to obtain η-long forms.
@@ -211,8 +202,8 @@ reify ty d =
       in
        Pair l r
     Sing α m → reify α m
+    Squash α | Box m ← d → Box $ reify α m
     Unit → Ax
-    Squash α → doBox (reify α d)
     _ → d
 
 -- | Reification for types.
@@ -383,7 +374,7 @@ eval tm =
     AX :$ _ → return $ const Ax
     BOX :$ m :& _→ do
       m' ← eval m
-      return $ \ρ → doBox (m' ρ)
+      return $ \ρ → Box (m' ρ)
     V v → return $ \ρ →
       case M.lookup v ρ of
         Just d → d
@@ -469,7 +460,6 @@ unify γ α m n = do
   n' ← nbeOpen γ α' n
   (,,) <$> out α' <*> out m' <*> out n' >>= \case
     _ | m' === n' → return m'
-    (_, BOX :$ p :& _, BOX :$ _ :& _) → return $ box p
     (SQUASH :$ _, _, _) → return m'
     (UNIV :$ _, SQUASH :$ σ :& _, SQUASH :$ τ :& _) →
       squash <$> unify γ univ σ τ
