@@ -50,35 +50,40 @@ doApp
   ∷ D v
   → D v
   → D v
-doApp (Lam f) m = f m
-doApp (Box m) n = Box $ doApp m n
-doApp m n = App m n
+doApp m n =
+  case m of
+    Lam f → f m
+    Box m' → Box $ doApp m' n
+    _ → App m n
 
 -- | Project the first component of a pair if possible
 --
 doFst
   ∷ D v
   → D v
-doFst (Pair m _) = m
-doFst (Box m) = Box $ doFst m
-doFst m = Fst m
+doFst = \case
+  Pair m _ → m
+  Box m → Box $ doFst m
+  m → Fst m
 
 -- | Project the second component of a pair if possible
 --
 doSnd
   ∷ D v
   → D v
-doSnd (Pair _ m) = m
-doSnd (Box m) = Box $ doSnd m
-doSnd m = Snd m
+doSnd = \case
+  Pair _ m → m
+  Box m → Box $ doSnd m
+  m → Snd m
 
 -- | Wrap a value in a box
 --
 doBox
   ∷ D v
   → D v
-doBox (Box m) = Box m
-doBox m = Box m
+doBox = \case
+  Box m → Box m
+  m → Box m
 
 -- | Whether a semantic term is canonical
 --
