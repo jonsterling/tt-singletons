@@ -85,6 +85,53 @@ doBox = \case
   Box m → Box m
   m → Box m
 
+-- | Compute the truth of an identification
+--
+doEqual
+  ∷ DT v
+  → DT v
+  → D v
+  → D v
+  → D v
+doEqual α β m n =
+  case (α, β, m, n) of
+    (Univ, Univ, Univ, Univ) → Unit
+    (Univ, Univ, Void, Void) → Unit
+    (Univ, Univ, Unit, Unit) → Unit
+    (Univ, Univ, Pi σ τ, Pi σ' τ') →
+      Squash $ Sg (doEqual Univ Univ σ' σ) $ \_ →
+        Pi σ $ \s → Pi σ' $ \s' →
+          Pi (doEqual σ σ' s s') $ \_ →
+            doEqual Univ Univ (τ s) (τ' s')
+    (Univ, Univ, Sg σ τ, Sg σ' τ') →
+      Squash $ Sg (doEqual Univ Univ σ σ') $ \_ →
+        Pi σ $ \s → Pi σ' $ \s' →
+          Pi (doEqual σ σ' s s') $ \_ →
+            doEqual Univ Univ (τ s) (τ' s')
+    (Univ, Univ, Sing σ s, Sing σ' s') →
+      doEqual σ σ' s s'
+    (Univ, Univ, Squash σ, Squash τ) →
+      Squash $ Sg (Pi σ $ \_ → τ) $ \_ →
+        Pi τ $ \_ → σ
+    (Univ, Univ, m'', n'')
+      | canon m'' && canon n'' → Void
+    (Void, Void, _, _) → Unit
+    (Unit, Unit, _, _) → Unit
+    (Pi σ τ, Pi σ' τ', f, g) →
+      Squash $ Pi σ $ \s → Pi σ' $ \s' →
+        Pi (doEqual σ σ' s s') $ \_ →
+          doEqual (τ s) (τ' s') (doApp f s) (doApp g s')
+    (Sg σ τ, Sg σ' τ', p, q) →
+      Squash $ Sg (doEqual σ σ' (doFst p) (doFst q)) $ \_ →
+        doEqual (τ (doFst p)) (τ' (doFst q)) (doSnd p) (doSnd q)
+    (Sing σ s, Sing σ' s', _, _) →
+      doEqual σ σ' s s'
+    (Squash _, Squash _, _, _) → Unit
+    _
+      | canon α && canon β → Void
+      | otherwise → Equal α β m n
+    
+
 -- | Whether a semantic term is canonical
 --
 canon
@@ -242,40 +289,7 @@ eval tm =
       m' ← eval m
       n' ← eval n
       return $ \ρ →
-        case (α' ρ, β' ρ, m' ρ, n' ρ) of
-          (Univ, Univ, Univ, Univ) → Unit
-          (Univ, Univ, Void, Void) → Unit
-          (Univ, Univ, Unit, Unit) → Unit
-          (Univ, Univ, Pi σ τ, Pi σ' τ') →
-            Squash $ Sg (Equal Univ Univ σ' σ) $ \_ →
-              Pi σ $ \s → Pi σ' $ \s' →
-                Pi (Equal σ σ' s s') $ \_ →
-                  Equal Univ Univ (τ s) (τ' s')
-          (Univ, Univ, Sg σ τ, Sg σ' τ') →
-            Squash $ Sg (Equal Univ Univ σ σ') $ \_ →
-              Pi σ $ \s → Pi σ' $ \s' →
-                Pi (Equal σ σ' s s') $ \_ →
-                  Equal Univ Univ (τ s) (τ' s')
-          (Univ, Univ, Sing σ s, Sing σ' s') →
-            Equal σ σ' s s'
-          (Univ, Univ, Squash σ, Squash τ) →
-            Squash $ Sg (Pi σ $ \_ → τ) $ \_ →
-              Pi τ $ \_ → σ
-          (Univ, Univ, m'', n'') | canon m'' && canon n'' → Void
-          (Void, Void, _, _) → Unit
-          (Unit, Unit, _, _) → Unit
-          (Pi σ τ, Pi σ' τ', f, g) →
-            Squash $ Pi σ $ \s → Pi σ' $ \s' →
-              Pi (Equal σ σ' s s') $ \_ →
-                Equal (τ s) (τ' s') (doApp f s) (doApp g s')
-          (Sg σ τ, Sg σ' τ', p, q) →
-            Squash $ Sg (Equal σ σ' (doFst p) (doFst q)) $ \_ →
-              Equal (τ (doFst p)) (τ' (doFst q)) (doSnd p) (doSnd q)
-          (Sing σ s, Sing σ' s', _, _) → Equal σ σ' s s'
-          (Squash _, Squash _, _, _) → Unit
-          (α'', β'', m'', n'')
-            | canon α'' && canon β'' → Void
-            | otherwise → Equal α'' β'' m'' n''
+        doEqual (α' ρ) (β' ρ) (m' ρ) (n' ρ)
     COE :$ α :& β :& q :& m :& _ → do
       α' ← eval α
       β' ← eval β
