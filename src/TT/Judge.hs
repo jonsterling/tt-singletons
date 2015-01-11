@@ -166,7 +166,8 @@ checkTypeNe
   → m (t Z)
 checkTypeNe γ ty tm = do
   ty' ← erase =<< infType γ tm
-  unify γ univ ty ty'
+  ty'' ← unify γ univ ty ty'
+  nbeOpen γ ty'' tm
 
 -- | Decide definitional equality
 --
