@@ -33,8 +33,7 @@ import Data.Vinyl
 import Prelude hiding (pi, EQ)
 
 data JudgeError t
-  = UnifError (UnifError t)
-  | NotType t
+  = NotType t
   | NotOfType t t
   | NotInferrable t
   | ExpectedPiType t
