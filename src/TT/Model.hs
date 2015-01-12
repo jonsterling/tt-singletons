@@ -493,6 +493,6 @@ unify γ α m n = do
       p'' ← unify γ σ p p'
       τp ← uτ // p''
       pair p'' <$> unify γ τp q q'
-    _ → do
+    _ →
       throwTT $ NotEqual α' m' n'
    
