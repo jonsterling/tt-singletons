@@ -70,8 +70,9 @@ isType γ ty =
       α' ← isType γ α
       x :\ β ← out xβ
       sg α' . (x \\) <$> isType (γ >: (x, α')) β
-    UNIT :$ _ → return unit
     VOID :$ _ → return void
+    UNIT :$ _ → return unit
+    BOOL :$ _ → return bool
     SING :$ α :& m :& _ → do
       α' ← isType γ α
       m' ← checkType γ α' m
@@ -108,6 +109,7 @@ checkType γ ty tm = do
       α' ← checkType γ ty α
       sing α' <$> checkType γ α' m
     (UNIV :$ _, UNIT :$ _) → return unit
+    (UNIV :$ _, BOOL :$ _) → return bool
     (UNIV :$ _, VOID :$ _) → return void
     (PI :$ α :& xβ :& _, LAM :$ ye :& _) → do
       z ← fresh
@@ -128,6 +130,8 @@ checkType γ ty tm = do
       m' ← checkType γ α m
       return $ box m'
     (UNIT :$ _, AX :$ _) → return ax
+    (BOOL :$ _, TT :$ _) → return tt
+    (BOOL :$ _, FF :$ _) → return ff
     _ → do
       ne ← neutral tm
       if ne then checkTypeNe γ ty tm else
@@ -161,6 +165,7 @@ neutral tm =
     COH :$ _ → True
     ABORT :$ _ → True
     REFL :$ _ → True
+    IF :$ _ → True
     _ → False
 
 -- | Check the type of neutral terms.
@@ -187,6 +192,14 @@ infType
 infType γ tm =
   out tm >>= \case
     V v → containsLocal γ v
+    IF :$ xα :& m :& t :& f :& _ → do
+      mty ← erase =<< infType γ m
+      _ ← unify γ univ mty bool
+      αtt ← xα // tt
+      αff ← xα // ff
+      _ ← checkType γ αtt t
+      _ ← checkType γ αff f
+      nbeOpenT γ =<< xα // m
     APP :$ m :& n :& _ → do
       mty ← erase =<< infType γ m
       α :& xβ :& _ ← (out mty ^!? acts . _ViewOp PI)

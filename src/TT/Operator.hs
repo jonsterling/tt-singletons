@@ -27,6 +27,10 @@ module TT.Operator
 , coe
 , coh
 , refl
+, bool
+, tt
+, ff
+, if'
 ) where
 
 import Abt.Types.Nat
@@ -52,6 +56,11 @@ data Op arity where
 
   UNIT ∷ Op '[]
   AX ∷ Op '[]
+
+  BOOL ∷ Op '[]
+  TT ∷ Op '[]
+  FF ∷ Op '[]
+  IF ∷ Op '[S Z, Z, Z, Z]
 
   VOID ∷ Op '[]
   ABORT ∷ Op '[Z, Z]
@@ -84,6 +93,10 @@ instance HEq1 Op where
   heq1 COE COE = Just Refl
   heq1 COH COH = Just Refl
   heq1 REFL REFL = Just Refl
+  heq1 BOOL BOOL = Just Refl
+  heq1 TT TT = Just Refl
+  heq1 FF FF = Just Refl
+  heq1 IF IF = Just Refl
   heq1 _ _ = Nothing
 
 instance Show1 Op where
@@ -107,6 +120,10 @@ instance Show1 Op where
     COE → "coe"
     COH → "coh"
     REFL → "refl"
+    BOOL → "bool"
+    TT → "tt"
+    FF → "ff"
+    IF → "if"
 
 pi ∷ Abt v Op t ⇒ t Z → t (S Z) → t Z
 pi α xβ = PI $$ α :& xβ :& RNil
@@ -165,3 +182,15 @@ coh α β p m = COH $$ α :& β :& p :& m :& RNil
 
 refl ∷ Abt v Op t ⇒ t Z → t Z → t Z
 refl α m = REFL $$ α :& m :& RNil
+
+bool ∷ Abt v Op t ⇒ t Z
+bool = BOOL $$ RNil
+
+tt ∷ Abt v Op t ⇒ t Z
+tt = TT $$ RNil
+
+ff ∷ Abt v Op t ⇒ t Z
+ff = FF $$ RNil
+
+if' ∷ Abt v Op t ⇒ t (S Z) → t Z → t Z → t Z → t Z
+if' xα m t f = IF $$ xα :& m :& t :& f :& RNil
