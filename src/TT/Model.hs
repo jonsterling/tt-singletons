@@ -73,6 +73,10 @@ data D v
   | Coe (DT v) (DT v) (D v) (D v)
   | Coh (DT v) (DT v) (D v) (D v)
   | Refl (DT v) (D v)
+  | Bool
+  | Tt
+  | Ff
+  | If (D v → DT v) (D v) (D v) (D v)
 
 -- | Perform application if possible
 --
@@ -106,6 +110,20 @@ doSnd = \case
   Box m → Box $ doSnd m
   m → Snd m
 
+-- | Case on booleans if possible
+--
+doIf
+  ∷ (D v → DT v)
+  → D v
+  → D v
+  → D v
+  → D v
+doIf α m t f =
+  case m of
+    Tt → t
+    Ff → f
+    _ → If α m t f
+
 -- | Compute the truth of an identification
 --
 doEqual
@@ -119,6 +137,7 @@ doEqual α β m n =
     (Univ, Univ, Univ, Univ) → Unit
     (Univ, Univ, Void, Void) → Unit
     (Univ, Univ, Unit, Unit) → Unit
+    (Univ, Univ, Bool, Bool) → Unit
     (Univ, Univ, Pi σ τ, Pi σ' τ') →
       Squash $ Sg (doEqual Univ Univ σ' σ) $ \_ →
         Pi σ $ \s → Pi σ' $ \s' →
@@ -137,6 +156,13 @@ doEqual α β m n =
     (Univ, Univ, m'', n'')
       | canon m'' && canon n'' → Void
     (Void, Void, _, _) → Unit
+    (Bool, Bool, Tt, Tt) → Unit
+    (Bool, Bool, Ff, Ff) → Unit
+    (Bool, Bool, Tt, Ff) → Void
+    (Bool, Bool, Ff, Tt) → Void
+    (Bool, Bool, _, _) 
+      | not (canon m) || not (canon n) → Equal Bool Bool m n
+      | otherwise → Void
     (Unit, Unit, _, _) → Unit
     (Pi σ τ, Pi σ' τ', f, g) →
       Squash $ Pi σ $ \s → Pi σ' $ \s' →
@@ -262,6 +288,12 @@ quote = \case
   Refl α m → refl <$> quote α <*> quote m
   FV v → pure $ var v
   Box q → box <$> quote q
+  Bool → pure bool
+  Tt → pure tt
+  Ff → pure ff
+  If α m t f → do
+    x ← fresh
+    if' <$> ((x \\) <$> quote (α $ FV x)) <*> quote m <*> quote t <*> quote f
 
 -- | Semantic environments map variables to values.
 --
@@ -383,6 +415,17 @@ eval tm =
     BOX :$ m :& _→ do
       m' ← eval m
       return $ \ρ → Box (m' ρ)
+    BOOL :$ _ → return $ const Bool
+    TT :$ _ → return $ const Tt
+    FF :$ _ → return $ const Ff
+    IF :$ xα :& m :& t :& f :& _ → do
+      x :\ α ← out xα
+      α' ← eval α
+      m' ← eval m
+      t' ← eval t
+      f' ← eval f
+      return $ \ρ →
+        doIf (α' . extendEnv ρ x) (m' ρ) (t' ρ) (f' ρ)
     V v → return $ \ρ →
       case M.lookup v ρ of
         Just d → d
